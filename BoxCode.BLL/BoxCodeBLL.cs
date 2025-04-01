@@ -13,8 +13,8 @@ namespace BoxCode.BLL
 {
     public class BoxCodeBLL
     {
-        private static bool bPrint = true;
-        static Engine engine = new Engine(); //打印機引擎
+        public static bool bPrint = true;
+        static readonly Engine engine = new Engine(); //打印機引擎
         public static LabelFormatDocument format1; //獲取 模板內容
         public static LabelFormatDocument format2; //獲取 模板內容
 
@@ -25,6 +25,8 @@ namespace BoxCode.BLL
 
             if (BarTenderModel.PACKING_NUMBER == "24")
                 return Pint_24PackingModel(printnum);
+            if(BarTenderModel.PACKING_NUMBER == "50")
+                return Pint_50PackingModel(printnum);
             return Pint_80PackingModel(printnum);
         }
         public static int PrintEngineEnable(bool Enable, Action<int> reportProgress)
@@ -46,6 +48,11 @@ namespace BoxCode.BLL
                                 format1 = engine.Documents.Open(ConstantModel.AppPath + $"\\Model\\準旺72吋外箱貼-橫版.btw");
                                 reportProgress?.Invoke(1000); // 報告100%的進度                    
                                 format2 = engine.Documents.Open(ConstantModel.AppPath + $"\\Model\\準旺72外箱貼MAC_橫版.btw");
+                            }
+                            else if(BarTenderModel.PACKING_NUMBER == "50")
+                            {
+                                reportProgress?.Invoke(1000); // 報告100%的進度                    
+                                format2 = engine.Documents.Open(ConstantModel.AppPath + $"\\Model\\TIVE貨櫃鎖-外箱貼MAC.btw");
                             }
                             else
                             {
@@ -213,6 +220,49 @@ namespace BoxCode.BLL
 
             return 0;
         }
+        public static int Pint_50PackingModel(int printnum)
+        {
+            if (engine.IsAlive == false)
+            {
+                NLogDAL.Instance.LogWarning(new NLogModel("Print Engine Is Not Alive,Reset Engine", "WARNING"));
+                engine.Start();
+                format2 = engine.Documents.Open(ConstantModel.AppPath + $"\\Model\\TIVE貨櫃鎖-外箱貼MAC.btw");
+            }
+
+            Result rel = 0;
+
+            // 確保前 25 筆資料放入 MAC
+            List<string> first25 = InputModel.ListInputValue.Take(25).ToList();
+            string fruitsStringFirst = String.Join("\r\n", first25);
+            format2.SubStrings["MAC序號1"].Value = fruitsStringFirst;
+
+            // 取出 25 筆之後的資料放入 MAC2
+            if (InputModel.ListInputValue.Count > 25)
+            {
+                List<string> after25 = InputModel.ListInputValue.Skip(25).ToList();
+                string fruitsStringAfter = String.Join("\r\n", after25);
+                format2.SubStrings["MAC序號2"].Value = fruitsStringAfter;
+            }
+            else
+                format2.SubStrings["MAC序號2"].Value = "";
+            NLogDAL.Instance.LogInfo(new NLogModel("Start to Print 2", "INFO"));
+            for (int i = 0; i < printnum; i++)
+            {
+                if (bPrint)
+                    rel = format2.Print();//列印
+                else
+                    rel = Result.Success;
+                if (rel != Result.Success)
+                    break;
+            }
+            if (rel != Result.Success)
+            {
+                NLogDAL.Instance.LogWarning(new NLogModel("Failed to Print 2", "WARNING"));
+                return ConstantModel.ERROR_PRINT_FAIL;
+            }
+
+            return 0;
+        }
         public static int RePint_PackingModel(string BoxNumber)
         {
             //取得該箱最小最大號值
@@ -220,6 +270,8 @@ namespace BoxCode.BLL
 
             if (BarTenderModel.PACKING_NUMBER == "24")
                 return ReprintView24PackingModel(BoxNumber);
+            else if(BarTenderModel.PACKING_NUMBER == "50")
+                return ReprintView50PackingModel(BoxNumber);
             return ReprintView80PackingModel(BoxNumber);
         }
         public static int ReprintView24PackingModel(string BoxNumber)
@@ -241,18 +293,18 @@ namespace BoxCode.BLL
             format1.SubStrings["裝箱數"].Value = InputModel.ListReprintValue.Count.ToString();//這邊使用實際的裝箱數
             NLogDAL.Instance.LogInfo(new NLogModel("Start to ReView 1 Box"+ BoxNumber, "INFO"));
             Result rel;
-            /*if (bPrint)
+            if (bPrint)
                 rel = format1.Print();//列印
-            else*/
+            else
                 rel = Result.Success;
             if (rel == Result.Success)
             {
                 string fruitsString = String.Join("\n", InputModel.ListInputValue);
                 format2.SubStrings["MAC"].Value = fruitsString;
                 NLogDAL.Instance.LogInfo(new NLogModel("Start to ReView 2 Box" + BoxNumber, "INFO"));
-                /*if (bPrint)
+                if (bPrint)
                     rel = format2.Print();//列印
-                else*/
+                else
                     rel = Result.Success;
                 if (rel != Result.Success)
                 {
@@ -285,9 +337,9 @@ namespace BoxCode.BLL
             format1.SubStrings["裝箱數"].Value = InputModel.ListReprintValue.Count.ToString();//這邊使用實際的裝箱數
             NLogDAL.Instance.LogInfo(new NLogModel("Start to ReView 1 Box" + BoxNumber, "INFO"));
             Result rel;
-            /*if (bPrint)
+            if (bPrint)
                 rel = format1.Print();//列印
-            else*/
+            else
                 rel = Result.Success;
             if (rel == Result.Success)
             {
@@ -306,9 +358,9 @@ namespace BoxCode.BLL
                 else
                     format2.SubStrings["MAC序號2"].Value = "";
                 NLogDAL.Instance.LogInfo(new NLogModel("Start to ReView 2 Box" + BoxNumber, "INFO"));
-                /*if (bPrint)
+                if (bPrint)
                     rel = format2.Print();//列印
-                else*/
+                else
                     rel = Result.Success;
                 if (rel != Result.Success)
                 {
@@ -321,6 +373,44 @@ namespace BoxCode.BLL
                 NLogDAL.Instance.LogWarning(new NLogModel("Failed to ReView 1", "WARNING"));
                 return ConstantModel.ERROR_PRINT_FAIL;
             }
+            return 0;
+        }
+        public static int ReprintView50PackingModel(string BoxNumber)
+        {
+            if (engine.IsAlive == false)
+            {
+                NLogDAL.Instance.LogWarning(new NLogModel("Print Engine Is Not Alive,Reset Engine", "WARNING"));
+                engine.Start();
+                format2 = engine.Documents.Open(ConstantModel.AppPath + $"\\Model\\準旺外12箱貼MAC_橫版.btw");
+            }
+
+            Result rel;
+ 
+            // 確保前 25 筆資料放入 MAC
+            List<string> first25 = InputModel.ListReprintValue.Take(25).ToList();
+            string fruitsStringFirst = String.Join("\r\n", first25);
+            format2.SubStrings["MAC序號1"].Value = fruitsStringFirst;
+
+            // 取出 40 筆之後的資料放入 MAC2
+            if (InputModel.ListReprintValue.Count > 25)
+            {
+                List<string> after25 = InputModel.ListReprintValue.Skip(25).ToList();
+                string fruitsStringAfter = String.Join("\r\n", after25);
+                format2.SubStrings["MAC序號2"].Value = fruitsStringAfter;
+            }
+            else
+                format2.SubStrings["MAC序號2"].Value = "";
+            NLogDAL.Instance.LogInfo(new NLogModel("Start to ReView 2 Box" + BoxNumber, "INFO"));
+            if (bPrint)
+                rel = format2.Print();//列印
+            else
+                rel = Result.Success;
+            if (rel != Result.Success)
+            {
+                NLogDAL.Instance.LogWarning(new NLogModel("Failed to ReView 2", "WARNING"));
+                return ConstantModel.ERROR_PRINT_FAIL;
+            }
+
             return 0;
         }
         public static void CheckPackingStatus()

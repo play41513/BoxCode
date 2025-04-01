@@ -42,7 +42,8 @@ namespace BoxCode
             }
             plNowBoxCount.Text = "BOX "+BarTenderModel.NOW_BOX_COUNT.ToString()+"  OF  " + BarTenderModel.TOTAL_BOX_COUNT;
             plQuantityPerBox.Text =InputModel.InputValueCount.ToString() + "  OF  " + BarTenderModel.PACKING_NUMBER;
-            BarTenderModel.TB_Part = BarTenderModel.PACKING_NUMBER.Contains("80") ? "720210122-03" : "720210722-03";
+            BarTenderModel.TB_Part = BarTenderModel.PACKING_NUMBER.Contains("24") ? "720210722-03" : "720210122-03";
+
             plTB_PART.Text = BarTenderModel.TB_Part;
             lbWorkOrderInfo.Text = " 工單號 :   "+ WorkOrderModel.WorkOrder + "      工號: "+ WorkOrderModel.EmployeeID; 
         }
@@ -72,7 +73,10 @@ namespace BoxCode
                         plResult.FillColor = Color.Green;
                         UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
                         PreViewModel.PreViewPageIndex = 1;
-                        Pint_PreView();
+                        if(BarTenderModel.PACKING_NUMBER == "50")
+                            Pint_PreViewForTIVE();
+                        else
+                            Pint_PreView();
                         BarTenderModel.NOW_BOX_COUNT = (Int32.Parse(BarTenderModel.NOW_BOX_COUNT) + 1).ToString();
                     }
                     else
@@ -126,7 +130,10 @@ namespace BoxCode
                                 plResult.FillColor = Color.Green;
                                 UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
                                 PreViewModel.PreViewPageIndex = 1;
-                                Pint_PreView();
+                                if (BarTenderModel.PACKING_NUMBER == "50")
+                                    Pint_PreViewForTIVE();
+                                else
+                                    Pint_PreView();
                                 BarTenderModel.NOW_BOX_COUNT = (Int32.Parse(BarTenderModel.NOW_BOX_COUNT) + 1).ToString();
                                 BoxCodeBLL.WriteLog(tb_model.Text);
                             }
@@ -297,16 +304,17 @@ namespace BoxCode
             }
             else
             {
+                int LineCount = BarTenderModel.PACKING_NUMBER == "50" ? 25 : 40;
                 lbPreViewMACTitle1.ForeColor = Color.DimGray;
                 TboxPreViewMAC1.Clear();
                 TboxPreViewMAC2.Clear();
                 lbPreViewMsg1.Text = "";
                 lbPreViewMsg2.Text = "";
-                if (InputModel.InputValueCount > 40)
+                if (InputModel.InputValueCount > LineCount)
                 {
                     lbPreViewMACTitle2.Visible = true;
-                    lbPreViewMsg1.Text = "0 / 40";
-                    lbPreViewMsg2.Text = "0 / "+(InputModel.InputValueCount-40).ToString();
+                    lbPreViewMsg1.Text = "0 / "+LineCount.ToString();
+                    lbPreViewMsg2.Text = "0 / "+(InputModel.InputValueCount- LineCount).ToString();
                     lbPreViewMAC2.Visible = true;
                     UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, true, true);
                     TboxPreViewMAC2.Clear();
@@ -334,6 +342,52 @@ namespace BoxCode
                 previewPath = Application.StartupPath + $"\\Model\\B-example1.bmp";
                 tableLayoutPanel9_SizeChanged(null, null);
             }
+            Bitmap bmp = new Bitmap(previewPath);
+            bmp.RotateFlip(RotateFlipType.Rotate90FlipNone);
+            pictureBoxPreViewModel.Image = bmp;
+        }
+        public void Pint_PreViewForTIVE()
+        {
+            tabControlPanel.SelectTab(ConstantModel.PAGE_CONTROL_PREVIEW_PANEL);
+            lbPreViewNumber.Text = PreViewModel.PreViewPageIndex.ToString() + "  /  2";
+
+            string modelname = "B-example.bmp";
+            LabelFormatDocument format = BoxCodeBLL.format2;
+ 
+            lbPreViewMACTitle1.ForeColor = Color.DimGray;
+            TboxPreViewMAC1.Clear();
+            TboxPreViewMAC2.Clear();
+            lbPreViewMsg1.Text = "";
+            lbPreViewMsg2.Text = "";
+            if (InputModel.InputValueCount > 25)
+            {
+                lbPreViewMACTitle2.Visible = true;
+                lbPreViewMsg1.Text = "0 / 25";
+                lbPreViewMsg2.Text = "0 / " + (InputModel.InputValueCount - 25).ToString();
+                lbPreViewMAC2.Visible = true;
+                UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, true, true);
+                TboxPreViewMAC2.Clear();
+            }
+            else
+            {
+                lbPreViewMACTitle2.Visible = false;
+                lbPreViewMsg1.Text = "0 / " + InputModel.InputValueCount.ToString();
+                lbPreViewMAC2.Visible = false;
+                UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, false, false);
+            }
+            UIControlModel.SetPanelStatus(plPreViewSample1, false, false);
+            UIControlModel.SetPanelStatus(plPreViewSample2, true, true);
+            UIControlModel.SetTextBoxStatus(TboxPreViewMAC1, true, true);
+
+            //預覽貼紙
+            Messages message = new Messages();
+            string previewPath = Application.StartupPath + $"\\Model\\";
+            format.ExportPrintPreviewToFile(previewPath, modelname, ImageType.JPEG, Seagull.BarTender.Print.ColorDepth.ColorDepth256
+                , new Resolution(1190, 1684), System.Drawing.Color.White, OverwriteOptions.Overwrite, true, true, out message);
+
+            previewPath = Application.StartupPath + $"\\Model\\C-example1.bmp";
+            tableLayoutPanel9_SizeChanged(null, null);
+
             Bitmap bmp = new Bitmap(previewPath);
             bmp.RotateFlip(RotateFlipType.Rotate90FlipNone);
             pictureBoxPreViewModel.Image = bmp;
@@ -401,9 +455,18 @@ namespace BoxCode
                     {
                         if (tb.Text == InputModel.InputValueCount.ToString())
                         {
-                            if (PreViewModel.PreViewPageIndex < 4)
-                                PreViewModel.PreViewPageIndex++;
-                            Pint_PreView();
+                            if (BarTenderModel.PACKING_NUMBER == "50")
+                            {
+                                if (PreViewModel.PreViewPageIndex < 2)
+                                    PreViewModel.PreViewPageIndex++;
+                                Pint_PreViewForTIVE();
+                            }
+                            else
+                            {
+                                if (PreViewModel.PreViewPageIndex < 4)
+                                    PreViewModel.PreViewPageIndex++;
+                                Pint_PreView();
+                            }
                         }
                         else
                             bPass = false;
@@ -422,9 +485,10 @@ namespace BoxCode
         }
         private void TboxPreViewMAC1_KeyPress(object sender, KeyPressEventArgs e)
         {
+            int LineCount = BarTenderModel.PACKING_NUMBER == "50" ? 25 : 40;
             if (e.KeyChar == (char)Keys.Back)
             {//lbPreViewMACTitle1
-                lbPreViewMsg1.Text = TboxPreViewMAC2.Lines.Length.ToString() + " / " + (InputModel.InputValueCount - 40).ToString();
+                lbPreViewMsg1.Text = TboxPreViewMAC2.Lines.Length.ToString() + " / " + (InputModel.InputValueCount - LineCount).ToString();
             }
             else if (e.KeyChar == (char)Keys.Enter)
             {
@@ -434,7 +498,7 @@ namespace BoxCode
                     e.Handled = true;
                     BoxCodeBLL.RePrint(BoxCodeBLL.format2);
                 }
-                else if(InputModel.InputValueCount <= 40)
+                else if(InputModel.InputValueCount <= LineCount)
                 {
                     lbPreViewMsg1.Text = TboxPreViewMAC1.Lines.Length.ToString()+" / " + (InputModel.InputValueCount).ToString();
                     if (TboxPreViewMAC1.Lines.Length == InputModel.InputValueCount)
@@ -442,7 +506,19 @@ namespace BoxCode
                         string fruitsString = String.Join("\r\n", InputModel.ListInputValue);
                         if (fruitsString == TboxPreViewMAC1.Text)
                         {
-                            if (PreViewModel.PreViewPageIndex < 4)
+                            if(BarTenderModel.PACKING_NUMBER == "50" && PreViewModel.PreViewPageIndex < 2)
+                            {
+                                PreViewModel.PreViewPageIndex++;
+                                Pint_PreViewForTIVE();
+                                e.Handled = true;
+                            }
+                            else if (BarTenderModel.PACKING_NUMBER == "24" && PreViewModel.PreViewPageIndex < 4)
+                            {
+                                PreViewModel.PreViewPageIndex++;
+                                Pint_PreView();
+                                e.Handled = true;
+                            }
+                            else if (BarTenderModel.PACKING_NUMBER == "80" && PreViewModel.PreViewPageIndex < 4)
                             {
                                 PreViewModel.PreViewPageIndex++;
                                 Pint_PreView();
@@ -480,10 +556,10 @@ namespace BoxCode
                 }
                 else
                 {
-                    lbPreViewMsg1.Text = TboxPreViewMAC1.Lines.Length.ToString() + " / 40";
-                    if (TboxPreViewMAC1.Lines.Length >= 40)
+                    lbPreViewMsg1.Text = TboxPreViewMAC1.Lines.Length.ToString() + " / " + LineCount.ToString();
+                    if (TboxPreViewMAC1.Lines.Length >= LineCount)
                     {
-                        string fruitsString = String.Join("\r\n", InputModel.ListInputValue.Take(40));
+                        string fruitsString = String.Join("\r\n", InputModel.ListInputValue.Take(LineCount));
                         if (fruitsString == TboxPreViewMAC1.Text)
                         {
                             lbPreViewMACTitle1.ForeColor = Color.Green;
@@ -493,7 +569,7 @@ namespace BoxCode
                         else
                         {
                             string[] textBoxLines = TboxPreViewMAC1.Lines;
-                            for (int i = 0; i < 40; i++)
+                            for (int i = 0; i < LineCount; i++)
                             {
                                 if (textBoxLines[i] != InputModel.ListInputValue[i])
                                 {
@@ -503,7 +579,7 @@ namespace BoxCode
 
                                     // 將光標設置到該行+
                                     e.Handled = true;
-                                    int startIndex = TboxPreViewMAC1.GetFirstCharIndexFromLine(i);
+                                    //int startIndex = TboxPreViewMAC1.GetFirstCharIndexFromLine(i);
                                     //TboxPreViewMAC1.Select(startIndex, textBoxLines[i].Length);
                                     TboxPreViewMAC1.SelectAll();
                                     break;
@@ -516,9 +592,10 @@ namespace BoxCode
         }
         private void TboxPreViewMAC2_KeyPress(object sender, KeyPressEventArgs e)
         {
+            int LineCount = BarTenderModel.PACKING_NUMBER == "50" ? 25 : 40;
             if (e.KeyChar == (char)Keys.Back)
             {
-                lbPreViewMsg2.Text = TboxPreViewMAC2.Lines.Length.ToString() + " / " + (InputModel.InputValueCount - 40).ToString();
+                lbPreViewMsg2.Text = TboxPreViewMAC2.Lines.Length.ToString() + " / " + (InputModel.InputValueCount - LineCount).ToString();
             }
             else if (e.KeyChar == (char)Keys.Enter)
             {
@@ -530,21 +607,33 @@ namespace BoxCode
                     e.Handled = true;
                     BoxCodeBLL.RePrint(BoxCodeBLL.format2);
                     UIControlModel.SetTextBoxStatus(TboxPreViewMAC1, true, true);
-                    if(InputModel.InputValueCount > 40)
+                    if(InputModel.InputValueCount > LineCount)
                         UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, false, true);
                 }
                 else
                 {
-                    lbPreViewMsg2.Text = TboxPreViewMAC2.Lines.Length.ToString() + " / " + (InputModel.InputValueCount - 40).ToString();
-                    if ((TboxPreViewMAC2.Lines.Length == (InputModel.InputValueCount - 40)))
+                    lbPreViewMsg2.Text = TboxPreViewMAC2.Lines.Length.ToString() + " / " + (InputModel.InputValueCount - LineCount).ToString();
+                    if ((TboxPreViewMAC2.Lines.Length == (InputModel.InputValueCount - LineCount)))
                     {
-                        string fruitsString = String.Join("\r\n", InputModel.ListInputValue.Skip(40));
+                        string fruitsString = String.Join("\r\n", InputModel.ListInputValue.Skip(LineCount));
                         if (fruitsString == TboxPreViewMAC2.Text)
                         {
-                            if (PreViewModel.PreViewPageIndex < 4)
+                            if (BarTenderModel.PACKING_NUMBER == "80" && PreViewModel.PreViewPageIndex < 4)
                             {
                                 PreViewModel.PreViewPageIndex++;
                                 Pint_PreView();
+                                e.Handled = true;
+                            }
+                            else if (BarTenderModel.PACKING_NUMBER == "24" && PreViewModel.PreViewPageIndex < 4)
+                            {
+                                PreViewModel.PreViewPageIndex++;
+                                Pint_PreView();
+                                e.Handled = true;
+                            }
+                            else if (BarTenderModel.PACKING_NUMBER == "50" && PreViewModel.PreViewPageIndex < 2)
+                            {
+                                PreViewModel.PreViewPageIndex++;
+                                Pint_PreViewForTIVE();
                                 e.Handled = true;
                             }
                             else
@@ -559,9 +648,9 @@ namespace BoxCode
                         else
                         {
                             string[] textBoxLines = TboxPreViewMAC2.Lines;
-                            for (int i = 0; i < (InputModel.InputValueCount-40); i++)
+                            for (int i = 0; i < (InputModel.InputValueCount-LineCount); i++)
                             {
-                                if (textBoxLines[i] != InputModel.ListInputValue[40+i])
+                                if (textBoxLines[i] != InputModel.ListInputValue[LineCount +i])
                                 {
                                     // 找到不符合的行，這裡是從 1 開始計算行數
                                     int mismatchLineIndex = i + 1;
@@ -592,7 +681,10 @@ namespace BoxCode
                 plResult.FillColor = Color.Green;
                 UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
                 PreViewModel.PreViewPageIndex = 1;
-                Pint_PreView();
+                if(BarTenderModel.PACKING_NUMBER == "50")
+                    Pint_PreViewForTIVE();
+                else
+                    Pint_PreView();
                 BarTenderModel.NOW_BOX_COUNT = (Int32.Parse(BarTenderModel.NOW_BOX_COUNT) + 1).ToString();
             }
             else
@@ -614,38 +706,75 @@ namespace BoxCode
         }
         private void cbReprintBoxNumber_TextChanged(object sender, EventArgs e)
         {
+            // 清空重新打印值列表和列表框
             InputModel.ListReprintValue.Clear();
             listBoxReprint.Items.Clear();
+
+            // 取得箱號內容
             int iCount = 1;
             string[] contents = BoxCodeBLL.GetBoxContent(cbReprintBoxNumber.Text).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // 逐一處理內容並加入列表框
             foreach (string content in contents)
             {
                 InputModel.ListReprintValue.Add(content);
                 listBoxReprint.Items.Add($"[{iCount.ToString("D6")}]   {content}");
                 iCount++;
             }
+
+            // 設定列表框的選中項目
             listBoxReprint.SelectedIndex = 0;
 
+            // 呼叫重新打印包裝模型
+            BoxCodeBLL.bPrint = false;
             BoxCodeBLL.RePint_PackingModel(cbReprintBoxNumber.Text.Remove(0, 3));
-
-            string modelname = "A-example.bmp";
+            BoxCodeBLL.bPrint = true;
+            string modelname;
+            string previewPath;
+            Bitmap bmp;
             Messages message = new Messages();
-            string previewPath = Application.StartupPath + $"\\Model\\";
-            BoxCodeBLL.format1.ExportPrintPreviewToFile(previewPath, modelname, ImageType.JPEG, Seagull.BarTender.Print.ColorDepth.ColorDepth256
-                , new Resolution(1190, 1684), System.Drawing.Color.White, OverwriteOptions.Overwrite, true, true, out message);
-            previewPath = Application.StartupPath + $"\\Model\\A-example1.bmp";
-            Bitmap bmp = new Bitmap(previewPath);
-            bmp.RotateFlip(RotateFlipType.Rotate90FlipNone);
-            pictureBoxReprintView1.Image = bmp;
+            // 預覽打印
+            if (BarTenderModel.PACKING_NUMBER != "50")
+            {
+                pictureBoxReprintView1.Visible = true;
+                btnReprintModel1.Visible = true;
+                modelname = "A-example.bmp";
 
-            modelname = "B-example.bmp";
+                previewPath = Application.StartupPath + $"\\Model\\";
+                BoxCodeBLL.format1.ExportPrintPreviewToFile(previewPath, modelname, ImageType.JPEG, Seagull.BarTender.Print.ColorDepth.ColorDepth256
+                    , new Resolution(1190, 1684), System.Drawing.Color.White, OverwriteOptions.Overwrite, true, true, out message);
+
+                // 載入預覽圖片
+                previewPath = Application.StartupPath + $"\\Model\\A-example1.bmp";
+                bmp = new Bitmap(previewPath);
+                bmp.RotateFlip(RotateFlipType.Rotate90FlipNone);
+                pictureBoxReprintView1.Image = bmp;
+                modelname = "B-example.bmp";
+                
+            }
+            else
+            {
+                btnReprintModel1.Visible = false;
+                pictureBoxReprintView1.Visible = false;
+                modelname = "C-example.bmp";
+            }
+
+            // 預覽打印
+            if(BarTenderModel.PACKING_NUMBER == "50")
+                modelname = "C-example.bmp";
             previewPath = Application.StartupPath + $"\\Model\\";
             BoxCodeBLL.format2.ExportPrintPreviewToFile(previewPath, modelname, ImageType.JPEG, Seagull.BarTender.Print.ColorDepth.ColorDepth256
                 , new Resolution(1190, 1684), System.Drawing.Color.White, OverwriteOptions.Overwrite, true, true, out message);
-            previewPath = Application.StartupPath + $"\\Model\\B-example1.bmp";
+
+            // 載入預覽圖片
+            if (BarTenderModel.PACKING_NUMBER == "50")
+                previewPath = Application.StartupPath + $"\\Model\\C-example1.bmp";
+            else
+                previewPath = Application.StartupPath + $"\\Model\\B-example1.bmp";
             bmp = new Bitmap(previewPath);
             bmp.RotateFlip(RotateFlipType.Rotate90FlipNone);
             pictureBoxReprintView2.Image = bmp;
+
         }
         private void btnReprintModel1_Click(object sender, EventArgs e)
         {
@@ -818,15 +947,16 @@ namespace BoxCode
             }
             else
             {
+                int LineCount = BarTenderModel.PACKING_NUMBER == "50" ? 25 : 40;
                 lbPreViewMACTitle1.ForeColor = Color.DimGray;
                 TboxPreViewMAC1.Clear();
                 TboxPreViewMAC2.Clear();
                 lbPreViewMsg1.Text = "";
                 lbPreViewMsg2.Text = "";
-                if (InputModel.InputValueCount > 40)
+                if (InputModel.InputValueCount > LineCount)
                 {
-                    lbPreViewMsg1.Text = "0 / 40";
-                    lbPreViewMsg2.Text = "0 / " + (InputModel.InputValueCount - 40).ToString();
+                    lbPreViewMsg1.Text = "0 / "+ LineCount.ToString();
+                    lbPreViewMsg2.Text = "0 / " + (InputModel.InputValueCount - LineCount).ToString();
                     lbPreViewMAC2.Visible = true;
                     UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, true, true);
 

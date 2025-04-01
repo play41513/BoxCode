@@ -31,18 +31,20 @@ namespace BoxCode.DAL
                 string lastLine = lines[lines.Length - 1];
                 countInLastLine = lastLine.Split(',').Length;
             }
-            // 判斷是否已經有八個數據，若已滿，則換行
+            // 一列多少數據
+            int LineCount = BarTenderModel.PACKING_NUMBER == "50" ? 5 : 8;
+            // 判斷列是否已經數據已滿，若已滿，則換行
             using (
                 StreamWriter sw = File.AppendText(fullPath))
             {
-                if (countInLastLine % 8 == 0 && countInLastLine != 0)
+                if (countInLastLine % LineCount == 0 && countInLastLine != 0)
                 {
                     sw.WriteLine(); // 換行
                     if (InputModel.InputValueCount == Int32.Parse(WorkOrderModel.PACKING_NUMBER)
                         || InputModel.InputValueCount == 0)
                         sw.WriteLine("Box" + BarTenderModel.NOW_BOX_COUNT);                      
                 }
-                if (countInLastLine % 8 == 0)
+                if (countInLastLine % LineCount == 0)
                 {
                     if (InputModel.InputValueCount == 1)
                         sw.WriteLine("Box"+BarTenderModel.NOW_BOX_COUNT);

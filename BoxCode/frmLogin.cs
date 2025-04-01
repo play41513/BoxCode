@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,6 +20,7 @@ namespace BoxCode
         public frmLogin()
         {
             InitializeComponent();
+            ReadRecordFile();
         }
 
         private void plFrmLoginTop_MouseDown(object sender, MouseEventArgs e)
@@ -56,7 +58,7 @@ namespace BoxCode
             WorkOrderModel.TOTAL_BOX_COUNT  = TBoxTotal_Box.Text;
             WorkOrderModel.PACKING_NUMBER   = TBoxPackingNumber.Text;
             WorkOrderModel.EmployeeID       = TBoxEmployeeID.Text;
-
+            SaveRecordFile();
             frmMain FrmMain = new frmMain();
             FrmMain.Shown+= (s, args) =>
             {
@@ -97,6 +99,44 @@ namespace BoxCode
                 else if (tb.Name.Contains("EmployeeID"))
                     btnLogin.PerformClick();
             }
+        }
+        private void ReadRecordFile()
+        {
+            if (!File.Exists("BoxCode.ini"))
+                return;
+            var reader = new StreamReader("BoxCode.ini");
+            string line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                var columns = line.Split(',');
+                if (columns.Length == 2)
+                {
+                    if (columns[0].Trim().Contains("WorkOrder"))
+                        TBoxWorkOrder.Text = columns[1].Trim();
+                    else if (columns[0].Trim().Contains("Inital_Serial"))
+                        TBoxInital_Serial.Text = columns[1].Trim();
+                    else if (columns[0].Trim().Contains("FInal_Serial"))
+                        TBoxFInal_Serial.Text = columns[1].Trim();
+                    else if (columns[0].Trim().Contains("PackingNumber"))
+                        TBoxPackingNumber.Text = columns[1].Trim();
+                    else if (columns[0].Trim().Contains("Total_Box"))
+                        TBoxTotal_Box.Text = columns[1].Trim();
+                    else if (columns[0].Trim().Contains("EmployeeID"))
+                        TBoxEmployeeID.Text = columns[1].Trim();
+                }
+            }
+            reader.Close();
+        }
+        private void SaveRecordFile()
+        {
+            var writer = new StreamWriter("BoxCode.ini");
+            writer.WriteLine($"WorkOrder,{TBoxWorkOrder.Text}");
+            writer.WriteLine($"Inital_Serial,{TBoxInital_Serial.Text}");
+            writer.WriteLine($"FInal_Serial,{TBoxFInal_Serial.Text}");
+            writer.WriteLine($"PackingNumber,{TBoxPackingNumber.Text}");
+            writer.WriteLine($"Total_Box,{TBoxTotal_Box.Text}");
+            writer.WriteLine($"EmployeeID,{TBoxEmployeeID.Text}");
+            writer.Close();
         }
     }
 }
