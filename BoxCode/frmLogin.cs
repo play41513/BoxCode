@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using BoxCode.Model;
+using BoxCode.BLL;
 
 namespace BoxCode
 {
@@ -17,6 +18,8 @@ namespace BoxCode
         protected Point MousePt; // 紀錄移動前和移動後的滑鼠座標
         protected bool canMove = false; // 紀錄表單可否被拖曳
         protected int LeftVar = 0, TopVar = 0; // 紀錄form的移動量
+        string tiveUpload = "";
+
         public frmLogin()
         {
             InitializeComponent();
@@ -59,6 +62,9 @@ namespace BoxCode
             WorkOrderModel.PACKING_NUMBER   = TBoxPackingNumber.Text;
             WorkOrderModel.EmployeeID       = TBoxEmployeeID.Text;
             SaveRecordFile();
+
+
+            //CheckTiveSystem();
             frmMain FrmMain = new frmMain();
             FrmMain.Shown+= (s, args) =>
             {
@@ -123,6 +129,8 @@ namespace BoxCode
                         TBoxTotal_Box.Text = columns[1].Trim();
                     else if (columns[0].Trim().Contains("EmployeeID"))
                         TBoxEmployeeID.Text = columns[1].Trim();
+                    else if (columns[0].Trim().Contains("TiveUpload"))
+                        WorkOrderModel.TiveUpload = columns[1].Trim();
                 }
             }
             reader.Close();
@@ -136,7 +144,8 @@ namespace BoxCode
             writer.WriteLine($"PackingNumber,{TBoxPackingNumber.Text}");
             writer.WriteLine($"Total_Box,{TBoxTotal_Box.Text}");
             writer.WriteLine($"EmployeeID,{TBoxEmployeeID.Text}");
+            writer.WriteLine($"TiveUpload,{WorkOrderModel.TiveUpload}");
             writer.Close();
-        }
+        }    
     }
 }

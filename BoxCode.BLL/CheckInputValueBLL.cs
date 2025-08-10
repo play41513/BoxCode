@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using BoxCode.Model;
 using BoxCode.DAL;
+using System.Security.Cryptography;
 
 namespace BoxCode.BLL
 {
@@ -31,7 +32,9 @@ namespace BoxCode.BLL
             else
             {
                 if (!LoggingDAL.IsValueDuplicated(InputValue))
+                {
                     return 0;
+                }
                 else
                     return ConstantModel.ERROR_VALUE_IS_DUPLICATED;
             }

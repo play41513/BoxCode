@@ -17,6 +17,7 @@ namespace BoxCode.Model
         public static String TOTAL_BOX_COUNT { get; set; }
         public static String PACKING_NUMBER { get; set; }
         public static String EmployeeID { get; set; }
+        public static String TiveUpload { get; set; }
     }
     public class BarTenderModel
     {

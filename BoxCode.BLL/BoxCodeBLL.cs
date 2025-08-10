@@ -7,6 +7,8 @@ using BoxCode.Model;
 using BoxCode.DAL;
 using System.IO;
 using Seagull.BarTender.Print;
+using System.Security.Cryptography;
+using System.Threading;
 
 
 namespace BoxCode.BLL
@@ -231,10 +233,10 @@ namespace BoxCode.BLL
 
             Result rel = 0;
 
-            // 確保前 25 筆資料放入 MAC
-            List<string> first25 = InputModel.ListInputValue.Take(25).ToList();
-            string fruitsStringFirst = String.Join("\r\n", first25);
-            format2.SubStrings["MAC序號1"].Value = fruitsStringFirst;
+            // 前 25 筆資料放入 MAC
+            List<string> PreMACList25 = InputModel.ListInputValue.Take(25).ToList();
+            string PreMACValue = String.Join("\r\n", PreMACList25);
+            format2.SubStrings["MAC序號1"].Value = PreMACValue;
 
             // 取出 25 筆之後的資料放入 MAC2
             if (InputModel.ListInputValue.Count > 25)
@@ -245,6 +247,7 @@ namespace BoxCode.BLL
             }
             else
                 format2.SubStrings["MAC序號2"].Value = "";
+
             NLogDAL.Instance.LogInfo(new NLogModel("Start to Print 2", "INFO"));
             for (int i = 0; i < printnum; i++)
             {
@@ -343,7 +346,7 @@ namespace BoxCode.BLL
                 rel = Result.Success;
             if (rel == Result.Success)
             {
-                // 確保前 40 筆資料放入 MAC
+                // 前 40 筆資料放入 MAC
                 List<string> first40 = InputModel.ListReprintValue.Take(40).ToList();
                 string fruitsStringFirst = String.Join("\r\n", first40);
                 format2.SubStrings["MAC序號1"].Value = fruitsStringFirst;
@@ -420,6 +423,10 @@ namespace BoxCode.BLL
         public static void WriteLog(String logMsg)
         {
             LoggingDAL.WriteLog(logMsg);
+        }
+        public static void DeleteLog(String logMsg)
+        {
+            LoggingDAL.DeleteLog(logMsg);
         }
         public static void GetMinMaxValue(List<string> list)
         {

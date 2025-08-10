@@ -12,11 +12,17 @@ using Seagull.BarTender.Print;
 using BoxCode.BLL;
 using BoxCode.Model;
 using System.Threading;
+using System.Security.Cryptography;
+using NLog;
 
 namespace BoxCode
 {
     public partial class frmMain : Form
     {
+        private readonly Queue<string> _macQueue = new Queue<string>();
+        private bool _isProcessing = false;
+        private int _failUpLoderCount = 0;
+
         public frmMain()
         {
             InitializeComponent();
@@ -40,16 +46,16 @@ namespace BoxCode
                 listb_InputValue.SelectedIndex = listb_InputValue.Items.Count - 1;
                 count++;
             }
-            plNowBoxCount.Text = "BOX "+BarTenderModel.NOW_BOX_COUNT.ToString()+"  OF  " + BarTenderModel.TOTAL_BOX_COUNT;
-            plQuantityPerBox.Text =InputModel.InputValueCount.ToString() + "  OF  " + BarTenderModel.PACKING_NUMBER;
+            plNowBoxCount.Text = "BOX " + BarTenderModel.NOW_BOX_COUNT.ToString() + "  OF  " + BarTenderModel.TOTAL_BOX_COUNT;
+            plQuantityPerBox.Text = InputModel.InputValueCount.ToString() + "  OF  " + BarTenderModel.PACKING_NUMBER;
             BarTenderModel.TB_Part = BarTenderModel.PACKING_NUMBER.Contains("24") ? "720210722-03" : "720210122-03";
 
             plTB_PART.Text = BarTenderModel.TB_Part;
-            lbWorkOrderInfo.Text = " 工單號 :   "+ WorkOrderModel.WorkOrder + "      工號: "+ WorkOrderModel.EmployeeID; 
+            lbWorkOrderInfo.Text = " 工單號 :   " + WorkOrderModel.WorkOrder + "      工號: " + WorkOrderModel.EmployeeID;
         }
         private void frmMain_FormClosing(object sender, FormClosingEventArgs e)
         {
-            BoxCodeBLL.PrintEngineEnable(false,null);
+            BoxCodeBLL.PrintEngineEnable(false, null);
             System.Environment.Exit(0);
         }
         /// <summary>
@@ -58,12 +64,17 @@ namespace BoxCode
         /// </summary>
         private void tb_model_KeyPress(object sender, KeyPressEventArgs e)
         {
-            if(e.KeyChar == (char)Keys.Enter)
+            if (e.KeyChar == (char)Keys.Enter)
             {
                 UIControlModel.SetTextBoxStatus(tb_model, false, true);
                 plResult.FillColor = Color.White;
                 if (tb_model.Text.Contains("[LastBox]"))
                 {
+                    while (true)
+                    {   //等待MAC Queue清空
+                        if (_macQueue.Any()) break;
+                        Thread.Sleep(100);
+                    }
                     //列印
                     plResult.Text = "列印中...";
                     UI_Update(tb_model.Text, ConstantModel.MESSAGE_PRINTING);
@@ -73,7 +84,7 @@ namespace BoxCode
                         plResult.FillColor = Color.Green;
                         UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
                         PreViewModel.PreViewPageIndex = 1;
-                        if(BarTenderModel.PACKING_NUMBER == "50")
+                        if (BarTenderModel.PACKING_NUMBER == "50")
                             Pint_PreViewForTIVE();
                         else
                             Pint_PreView();
@@ -119,34 +130,58 @@ namespace BoxCode
                         InputModel.ListInputValue.Add(tb_model.Text);
                         InputModel.InputValueCount++;
                         plResult.Text = "輸入成功";
+                        // 加入Queue
+                        lock (_macQueue)
+                        {
+                            _macQueue.Enqueue(tb_model.Text);
+                        }
+                        //如果沒有啟動Process > 啟動
+                        if (!_isProcessing)
+                        {
+                            _ = ProcessMacQueueAsync(); // 丟棄Task避免警告
+                        }
+                        //
                         if (InputModel.InputValueCount == Int32.Parse(WorkOrderModel.PACKING_NUMBER))
-                        {   //數量到達裝箱數，箱數+1
-                            //列印
-                            plResult.Text = "列印中...";
-                            UI_Update(tb_model.Text, ConstantModel.MESSAGE_PRINTING);
-                            if (BoxCodeBLL.Pint_PackingModel(2) == 0)                            
+                        {
+                            while (true)
+                            {   //等待MAC Queue清空
+                                if (_macQueue.Any()) break;
+                                Thread.Sleep(100);
+                            }
+                            if (InputModel.InputValueCount == Int32.Parse(WorkOrderModel.PACKING_NUMBER))
                             {
-                                plResult.Text = "BOX " + BarTenderModel.NOW_BOX_COUNT.ToString() + " 列印完成";
-                                plResult.FillColor = Color.Green;
-                                UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
-                                PreViewModel.PreViewPageIndex = 1;
-                                if (BarTenderModel.PACKING_NUMBER == "50")
-                                    Pint_PreViewForTIVE();
+                                //數量到達裝箱數，箱數+1
+                                //列印
+                                plResult.Text = "列印中...";
+                                UI_Update(tb_model.Text, ConstantModel.MESSAGE_PRINTING);
+                                if (BoxCodeBLL.Pint_PackingModel(2) == 0)
+                                {
+                                    plResult.Text = "BOX " + BarTenderModel.NOW_BOX_COUNT.ToString() + " 列印完成";
+                                    plResult.FillColor = Color.Green;
+                                    UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
+                                    PreViewModel.PreViewPageIndex = 1;
+                                    if (BarTenderModel.PACKING_NUMBER == "50")
+                                        Pint_PreViewForTIVE();
+                                    else
+                                        Pint_PreView();
+                                    BarTenderModel.NOW_BOX_COUNT = (Int32.Parse(BarTenderModel.NOW_BOX_COUNT) + 1).ToString();
+                                    BoxCodeBLL.WriteLog(tb_model.Text);
+                                }
                                 else
-                                    Pint_PreView();
-                                BarTenderModel.NOW_BOX_COUNT = (Int32.Parse(BarTenderModel.NOW_BOX_COUNT) + 1).ToString();
-                                BoxCodeBLL.WriteLog(tb_model.Text);
+                                {
+                                    plResult.Text = "列印失敗";
+                                    plResult.FillColor = Color.Red;
+                                    InputModel.InputValueCount--;
+                                    InputModel.ListInputValue.Remove(tb_model.Text);
+                                    UI_Update(tb_model.Text, ConstantModel.ERROR_PRINT_FAIL);
+                                }
                             }
                             else
                             {
                                 plResult.Text = "列印失敗";
                                 plResult.FillColor = Color.Red;
-                                InputModel.InputValueCount--;
-                                InputModel.ListInputValue.Remove(tb_model.Text);
                                 UI_Update(tb_model.Text, ConstantModel.ERROR_PRINT_FAIL);
                             }
-
-                            
                         }
                         else
                         {
@@ -168,8 +203,8 @@ namespace BoxCode
                         UI_Update(tb_model.Text, result);
                     }
                 }
-                if(tabControlPanel.SelectedIndex != ConstantModel.PAGE_CONTROL_PREVIEW_PANEL)
-                    UIControlModel.SetTextBoxStatus(tb_model,true,true);
+                if (tabControlPanel.SelectedIndex != ConstantModel.PAGE_CONTROL_PREVIEW_PANEL)
+                    UIControlModel.SetTextBoxStatus(tb_model, true, true);
             }
         }
         /// <summary>
@@ -187,7 +222,7 @@ namespace BoxCode
                     // 更新進度條，必須在UI執行緒中執行
                     this.Invoke((Action)(() =>
                     {
-                        UpdateProgressBar(progress,1);
+                        UpdateProgressBar(progress, 1);
                     }));
                 });
                 if (resultCode != 0) // 檢查是否有錯誤碼
@@ -195,7 +230,7 @@ namespace BoxCode
                     // 操作失敗，顯示錯誤訊息並關閉應用程式
                     this.Invoke((Action)(() =>
                     {
-                        switch(resultCode)
+                        switch (resultCode)
                         {
                             case ConstantModel.ERROR_OPEN_PRINT_FILE_ERROR:
                                 MessageBox.Show("操作失敗，列印來源檔無法開啟。\nOperation Failed: Unable to Open the Print Source File"
@@ -212,7 +247,7 @@ namespace BoxCode
             })
             .ContinueWith(t =>
             {
-        // 隱藏Loading Panel
+                // 隱藏Loading Panel
                 this.Invoke((Action)(() =>
                 {
                     ShowLoadingPanel(false);
@@ -221,9 +256,9 @@ namespace BoxCode
                 }));
             }, TaskScheduler.FromCurrentSynchronizationContext());
         }
-        private void UI_Update(string InputValue,int ErrorCode)
+        private void UI_Update(string InputValue, int ErrorCode)
         {
-            string LogInfo = DateTime.Now.ToString()+"  輸入值 : "+ InputValue.PadRight(15) + " 輸入結果 : ";
+            string LogInfo = DateTime.Now.ToString() + "  輸入值 : " + InputValue.PadRight(15) + " 輸入結果 : ";
             switch (ErrorCode)
             {
                 case ConstantModel.ERROR_VALUE_IS_DUPLICATED:
@@ -233,6 +268,10 @@ namespace BoxCode
                 case ConstantModel.ERROR_MAC_FORMAT_IS_FAIL:
                     RTBoxRecord.SelectionColor = Color.Red;
                     LogInfo += "錯誤 輸入值格式錯誤";
+                    break;
+                case ConstantModel.ERROR_SERVER_VALUE_IS_EXISTED:
+                    RTBoxRecord.SelectionColor = Color.Red;
+                    LogInfo += "錯誤 Server端已存在輸入值";
                     break;
                 case ConstantModel.ERROR_MAC_IS_OVER_RANGE:
                     RTBoxRecord.SelectionColor = Color.Red;
@@ -248,7 +287,7 @@ namespace BoxCode
                     break;
                 case ConstantModel.MESSAGE_CHANGE_NEXT_BOX:
                     RTBoxRecord.SelectionColor = Color.Blue;
-                    LogInfo += "成功 此箱已完成 Box "+ BarTenderModel.NOW_BOX_COUNT;
+                    LogInfo += "成功 此箱已完成 Box " + BarTenderModel.NOW_BOX_COUNT;
                     listb_InputValue.Items.Add($"[{InputModel.InputValueCount.ToString("D6")}]   {InputValue}");
                     listb_InputValue.SelectedIndex = listb_InputValue.Items.Count - 1;
                     break;
@@ -262,7 +301,7 @@ namespace BoxCode
                     break;
                 default:
                     RTBoxRecord.SelectionColor = Color.Black;
-                    LogInfo += "成功"; 
+                    LogInfo += "成功";
                     listb_InputValue.Items.Add($"[{InputModel.InputValueCount.ToString("D6")}]   {InputValue}");
                     listb_InputValue.SelectedIndex = listb_InputValue.Items.Count - 1;
                     break;
@@ -282,7 +321,7 @@ namespace BoxCode
         public void Pint_PreView()
         {
             tabControlPanel.SelectTab(ConstantModel.PAGE_CONTROL_PREVIEW_PANEL);
-            lbPreViewNumber.Text = PreViewModel.PreViewPageIndex.ToString()+"  /  4";
+            lbPreViewNumber.Text = PreViewModel.PreViewPageIndex.ToString() + "  /  4";
 
             string modelname = PreViewModel.PreViewPageIndex <= 2 ? "A-example.bmp" : "B-example.bmp";
             LabelFormatDocument format = PreViewModel.PreViewPageIndex <= 2 ? BoxCodeBLL.format1 : BoxCodeBLL.format2;
@@ -295,9 +334,9 @@ namespace BoxCode
                 TBoxInital_Serial.Clear();
                 TBoxFinalSerial.Clear();
                 TBoxPackingNumber.Clear();
-                UIControlModel.SetPanelStatus(plPreViewSample1,true,true);
+                UIControlModel.SetPanelStatus(plPreViewSample1, true, true);
                 UIControlModel.SetPanelStatus(plPreViewSample2, false, false);
-                UIControlModel.SetTextBoxStatus(TboxTB_Part,true,true);
+                UIControlModel.SetTextBoxStatus(TboxTB_Part, true, true);
                 UIControlModel.SetTextBoxStatus(TBoxInital_Serial, false, true);
                 UIControlModel.SetTextBoxStatus(TBoxFinalSerial, false, true);
                 UIControlModel.SetTextBoxStatus(TBoxPackingNumber, false, true);
@@ -313,8 +352,8 @@ namespace BoxCode
                 if (InputModel.InputValueCount > LineCount)
                 {
                     lbPreViewMACTitle2.Visible = true;
-                    lbPreViewMsg1.Text = "0 / "+LineCount.ToString();
-                    lbPreViewMsg2.Text = "0 / "+(InputModel.InputValueCount- LineCount).ToString();
+                    lbPreViewMsg1.Text = "0 / " + LineCount.ToString();
+                    lbPreViewMsg2.Text = "0 / " + (InputModel.InputValueCount - LineCount).ToString();
                     lbPreViewMAC2.Visible = true;
                     UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, true, true);
                     TboxPreViewMAC2.Clear();
@@ -322,7 +361,7 @@ namespace BoxCode
                 else
                 {
                     lbPreViewMACTitle2.Visible = false;
-                    lbPreViewMsg1.Text = "0 / "+ InputModel.InputValueCount.ToString();
+                    lbPreViewMsg1.Text = "0 / " + InputModel.InputValueCount.ToString();
                     lbPreViewMAC2.Visible = false;
                     UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, false, false);
                 }
@@ -333,8 +372,8 @@ namespace BoxCode
             //預覽貼紙
             Messages message = new Messages();
             string previewPath = Application.StartupPath + $"\\Model\\";
-            format.ExportPrintPreviewToFile(previewPath, modelname, ImageType.JPEG,Seagull.BarTender.Print.ColorDepth.ColorDepth256
-                ,new Resolution(1190,1684),System.Drawing.Color.White,OverwriteOptions.Overwrite,true,true,out message);
+            format.ExportPrintPreviewToFile(previewPath, modelname, ImageType.JPEG, Seagull.BarTender.Print.ColorDepth.ColorDepth256
+                , new Resolution(1190, 1684), System.Drawing.Color.White, OverwriteOptions.Overwrite, true, true, out message);
             if (PreViewModel.PreViewPageIndex < 3)
                 previewPath = Application.StartupPath + $"\\Model\\A-example1.bmp";
             else
@@ -353,7 +392,7 @@ namespace BoxCode
 
             string modelname = "B-example.bmp";
             LabelFormatDocument format = BoxCodeBLL.format2;
- 
+
             lbPreViewMACTitle1.ForeColor = Color.DimGray;
             TboxPreViewMAC1.Clear();
             TboxPreViewMAC2.Clear();
@@ -492,25 +531,42 @@ namespace BoxCode
             }
             else if (e.KeyChar == (char)Keys.Enter)
             {
-                if(TboxPreViewMAC1.Text.Contains("[RePrint]"))
+                if (TboxPreViewMAC1.Text.Contains("[RePrint]"))
                 {
                     TboxPreViewMAC1.Clear();
                     e.Handled = true;
                     BoxCodeBLL.RePrint(BoxCodeBLL.format2);
                 }
-                else if(InputModel.InputValueCount <= LineCount)
+                else if (InputModel.InputValueCount <= LineCount)
                 {
-                    lbPreViewMsg1.Text = TboxPreViewMAC1.Lines.Length.ToString()+" / " + (InputModel.InputValueCount).ToString();
+                    lbPreViewMsg1.Text = TboxPreViewMAC1.Lines.Length.ToString() + " / " + (InputModel.InputValueCount).ToString();
                     if (TboxPreViewMAC1.Lines.Length == InputModel.InputValueCount)
                     {
                         string fruitsString = String.Join("\r\n", InputModel.ListInputValue);
                         if (fruitsString == TboxPreViewMAC1.Text)
                         {
-                            if(BarTenderModel.PACKING_NUMBER == "50" && PreViewModel.PreViewPageIndex < 2)
+                            if (BarTenderModel.PACKING_NUMBER == "50")
                             {
-                                PreViewModel.PreViewPageIndex++;
-                                Pint_PreViewForTIVE();
-                                e.Handled = true;
+                                if (PreViewModel.PreViewPageIndex < 2)
+                                {  //頁面一比對成功後 進入頁面二
+                                    PreViewModel.PreViewPageIndex++;
+                                    Pint_PreViewForTIVE();
+                                    e.Handled = true;
+                                }
+                                else
+                                {   //跳出BoxID輸入視窗
+                                    TboxPreViewMAC1.SelectionStart = TboxPreViewMAC1.Text.Length;
+                                    TboxPreViewMAC1.SelectionLength = 0;
+                                    UIControlModel.SetTextBoxStatus(TboxPreViewMAC1, false, true);
+                                    plScanBoxIDWindows.Enabled = true;
+                                    plScanBoxIDWindows.Visible = true;
+                                    tBoxScanBoxID.Enabled = true;
+                                    tBoxScanBoxID.Visible = true;
+                                    tBoxScanBoxID.Text = "";
+                                    tBoxScanBoxID.Focus();
+                                    plScanBoxIDWindows.Left = tabControlPanel.Width / 2 - plScanBoxIDWindows.Width / 2;
+                                    plScanBoxIDWindows.Top = tabControlPanel.Height / 2 - plScanBoxIDWindows.Height / 2;
+                                }
                             }
                             else if (BarTenderModel.PACKING_NUMBER == "24" && PreViewModel.PreViewPageIndex < 4)
                             {
@@ -563,7 +619,7 @@ namespace BoxCode
                         if (fruitsString == TboxPreViewMAC1.Text)
                         {
                             lbPreViewMACTitle1.ForeColor = Color.Green;
-                            UIControlModel.SetTextBoxStatus(TboxPreViewMAC1,false,true);
+                            UIControlModel.SetTextBoxStatus(TboxPreViewMAC1, false, true);
                             UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, true, true);
                         }
                         else
@@ -607,7 +663,7 @@ namespace BoxCode
                     e.Handled = true;
                     BoxCodeBLL.RePrint(BoxCodeBLL.format2);
                     UIControlModel.SetTextBoxStatus(TboxPreViewMAC1, true, true);
-                    if(InputModel.InputValueCount > LineCount)
+                    if (InputModel.InputValueCount > LineCount)
                         UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, false, true);
                 }
                 else
@@ -617,7 +673,7 @@ namespace BoxCode
                     {
                         string fruitsString = String.Join("\r\n", InputModel.ListInputValue.Skip(LineCount));
                         if (fruitsString == TboxPreViewMAC2.Text)
-                        {
+                        {   //比對成功後 決定程式下一個步驟
                             if (BarTenderModel.PACKING_NUMBER == "80" && PreViewModel.PreViewPageIndex < 4)
                             {
                                 PreViewModel.PreViewPageIndex++;
@@ -630,11 +686,28 @@ namespace BoxCode
                                 Pint_PreView();
                                 e.Handled = true;
                             }
-                            else if (BarTenderModel.PACKING_NUMBER == "50" && PreViewModel.PreViewPageIndex < 2)
+                            else if (BarTenderModel.PACKING_NUMBER == "50")
                             {
-                                PreViewModel.PreViewPageIndex++;
-                                Pint_PreViewForTIVE();
-                                e.Handled = true;
+                                if (PreViewModel.PreViewPageIndex < 2)
+                                {  //頁面一比對成功後 進入頁面二
+                                    PreViewModel.PreViewPageIndex++;
+                                    Pint_PreViewForTIVE();
+                                    e.Handled = true;
+                                }
+                                else
+                                {   //跳出BoxID輸入視窗
+                                    TboxPreViewMAC2.SelectionStart = TboxPreViewMAC2.Text.Length;
+                                    TboxPreViewMAC2.SelectionLength = 0;
+                                    UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, false, true);
+                                    plScanBoxIDWindows.Enabled = true;
+                                    plScanBoxIDWindows.Visible = true;
+                                    tBoxScanBoxID.Enabled = true;
+                                    tBoxScanBoxID.Visible = true;
+                                    tBoxScanBoxID.Text = "";
+                                    tBoxScanBoxID.Focus();
+                                    plScanBoxIDWindows.Left = tabControlPanel.Width / 2 - plScanBoxIDWindows.Width / 2;
+                                    plScanBoxIDWindows.Top = tabControlPanel.Height / 2 - plScanBoxIDWindows.Height / 2;
+                                }
                             }
                             else
                             {
@@ -648,9 +721,9 @@ namespace BoxCode
                         else
                         {
                             string[] textBoxLines = TboxPreViewMAC2.Lines;
-                            for (int i = 0; i < (InputModel.InputValueCount-LineCount); i++)
+                            for (int i = 0; i < (InputModel.InputValueCount - LineCount); i++)
                             {
-                                if (textBoxLines[i] != InputModel.ListInputValue[LineCount +i])
+                                if (textBoxLines[i] != InputModel.ListInputValue[LineCount + i])
                                 {
                                     // 找到不符合的行，這裡是從 1 開始計算行數
                                     int mismatchLineIndex = i + 1;
@@ -677,11 +750,11 @@ namespace BoxCode
             UIControlModel.SetTextBoxStatus(tb_model, false, true);
             if (BoxCodeBLL.Pint_PackingModel(2) == 0)
             {
-                plResult.Text = "BOX "+ BarTenderModel.NOW_BOX_COUNT.ToString() + " 列印完成";
+                plResult.Text = "BOX " + BarTenderModel.NOW_BOX_COUNT.ToString() + " 列印完成";
                 plResult.FillColor = Color.Green;
                 UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
                 PreViewModel.PreViewPageIndex = 1;
-                if(BarTenderModel.PACKING_NUMBER == "50")
+                if (BarTenderModel.PACKING_NUMBER == "50")
                     Pint_PreViewForTIVE();
                 else
                     Pint_PreView();
@@ -750,7 +823,7 @@ namespace BoxCode
                 bmp.RotateFlip(RotateFlipType.Rotate90FlipNone);
                 pictureBoxReprintView1.Image = bmp;
                 modelname = "B-example.bmp";
-                
+
             }
             else
             {
@@ -760,7 +833,7 @@ namespace BoxCode
             }
 
             // 預覽打印
-            if(BarTenderModel.PACKING_NUMBER == "50")
+            if (BarTenderModel.PACKING_NUMBER == "50")
                 modelname = "C-example.bmp";
             previewPath = Application.StartupPath + $"\\Model\\";
             BoxCodeBLL.format2.ExportPrintPreviewToFile(previewPath, modelname, ImageType.JPEG, Seagull.BarTender.Print.ColorDepth.ColorDepth256
@@ -794,7 +867,7 @@ namespace BoxCode
         }
         private void ShowLoadingPanel(bool Show)
         {
-            if(Show)
+            if (Show)
             {
                 tabControlPanel.SelectTab(ConstantModel.PAGE_CONTROL_LOADING_PANEL);
             }
@@ -851,8 +924,8 @@ namespace BoxCode
         private void plReprintRightPage_SizeChanged(object sender, EventArgs e)
         {
             plReprintTitle.Height = plReprintRightPage.Height * 75 / 646;
-            UIControlModel.ResizeLabelFontToFitPanel(lbReprintCH, plReprintTitleUP,2);
-            UIControlModel.ResizeLabelFontToFitPanel(lbReprintEN, plReprintTitleDOWN,0);
+            UIControlModel.ResizeLabelFontToFitPanel(lbReprintCH, plReprintTitleUP, 2);
+            UIControlModel.ResizeLabelFontToFitPanel(lbReprintEN, plReprintTitleDOWN, 0);
             UIControlModel.ResizePictureBoxToFitPanel(pictureBoxReprintView1, plRepritnPicturePanel1);
             UIControlModel.ResizePictureBoxToFitPanel(pictureBoxReprintView2, plRepritnPicturePanel2);
             plReprintModel1.Height = plReprintModel1.Width;
@@ -866,7 +939,7 @@ namespace BoxCode
             plPreViewEN.Height = plPreViewTitle.Height / 3;
             UIControlModel.ResizeLabelFontToFitPanel(lbPreViewCH, plPreViewCH, 0);
             UIControlModel.ResizeLabelFontToFitPanel(lbPreViewEN, plPreViewEN, 0);
-            UIControlModel.ResizeLabelFontToFitPanel(lbPreViewMACTitle1, plPreViewMACTitle1,-5);
+            UIControlModel.ResizeLabelFontToFitPanel(lbPreViewMACTitle1, plPreViewMACTitle1, -5);
             UIControlModel.ResizeLabelFontToFitPanel(lbPreViewMACTitle2, plPreViewMACTitle2, -5);
             UIControlModel.ResizeLabelFontToFitPanel(lbPreViewMsg1, plPreViewMACTitle1, -5);
             UIControlModel.ResizeLabelFontToFitPanel(lbPreViewMsg2, plPreViewMACTitle2, -5);
@@ -877,7 +950,7 @@ namespace BoxCode
             UIControlModel.ResizeLabelFontToFitPanel(lbPackingNumber, plPreViewPackingNumber, 0);//plTboxTB_Part
 
             TboxTB_Part.Font.Dispose();
-            TboxTB_Part.Font = new Font(TboxTB_Part.Font.FontFamily, lbPackingNumber.Font.Size-4, TboxTB_Part.Font.Style);
+            TboxTB_Part.Font = new Font(TboxTB_Part.Font.FontFamily, lbPackingNumber.Font.Size - 4, TboxTB_Part.Font.Style);
             TBoxInital_Serial.Font.Dispose();
             TBoxInital_Serial.Font = new Font(TboxTB_Part.Font.FontFamily, lbPackingNumber.Font.Size - 4, TboxTB_Part.Font.Style);
             TBoxFinalSerial.Font.Dispose();
@@ -908,10 +981,10 @@ namespace BoxCode
         private void tabPageMain_Resize(object sender, EventArgs e)
         {
             plQuantityPerBox.Font
-                = UIControlModel.ResizeUiPanel(plQuantityPerBox.Font, plQuantityPerBox.Height, plQuantityPerBox.Width, plQuantityPerBox.CreateGraphics(), plQuantityPerBox.Text, 30,-2);
+                = UIControlModel.ResizeUiPanel(plQuantityPerBox.Font, plQuantityPerBox.Height, plQuantityPerBox.Width, plQuantityPerBox.CreateGraphics(), plQuantityPerBox.Text, 30, -2);
             plNowBoxCount.Font
                 = plQuantityPerBox.Font;
-            plTB_PART.Font 
+            plTB_PART.Font
                 = plQuantityPerBox.Font;
         }
 
@@ -930,7 +1003,7 @@ namespace BoxCode
         private void pictboxPreViewReprint_Click(object sender, EventArgs e)
         {
             pictboxPreViewReprint.Enabled = false;
-            if (PreViewModel.PreViewPageIndex <= 2)
+            if (PreViewModel.PreViewPageIndex <= 2 && BarTenderModel.PACKING_NUMBER != "50")
             {
                 lbTB_Part.ForeColor = Color.DimGray;
                 lbInital_Serial.ForeColor = Color.DimGray;
@@ -955,7 +1028,7 @@ namespace BoxCode
                 lbPreViewMsg2.Text = "";
                 if (InputModel.InputValueCount > LineCount)
                 {
-                    lbPreViewMsg1.Text = "0 / "+ LineCount.ToString();
+                    lbPreViewMsg1.Text = "0 / " + LineCount.ToString();
                     lbPreViewMsg2.Text = "0 / " + (InputModel.InputValueCount - LineCount).ToString();
                     lbPreViewMAC2.Visible = true;
                     UIControlModel.SetTextBoxStatus(TboxPreViewMAC2, true, true);
@@ -975,6 +1048,162 @@ namespace BoxCode
                 BoxCodeBLL.RePrint(BoxCodeBLL.format2);
             }
             pictboxPreViewReprint.Enabled = true;
+        }
+
+
+        private async Task ProcessMacQueueAsync()
+        {
+            _isProcessing = true;
+            try
+            {
+                while (true)
+                {
+                    string mac;
+                    lock (_macQueue)
+                    {
+                        if (!_macQueue.Any()) break;
+                        mac = _macQueue.Dequeue(); // 只 dequeue 一次，不重複 enqueue
+                    }
+
+                    int retryCount = 0;
+                    bool success = false;
+
+                    while (!success)
+                    {
+                        int iResult = await TiveUploaderBLL.UploaderMACToTiveSystem(mac);
+                        switch (iResult)
+                        {
+                            case ConstantModel.MESSAGE_TIVE_UPLOADER_PASS:
+                                {
+                                    success = true;
+                                    break;
+                                }
+                            case ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL:
+                                {
+                                    retryCount++;
+                                    if (retryCount % 3 == 0)
+                                    {
+                                        // 每失敗 3 次，提醒使用者一次
+                                        MessageBox.Show(
+                                            $"與伺服器連線失敗。\n請確認網路是否正常。\n\nMAC: {mac}\n\n已重試 {retryCount} 次。",
+                                            "連線異常",
+                                            MessageBoxButtons.OK,
+                                            MessageBoxIcon.Warning
+                                        );
+                                    }
+
+                                    // 等待 1 秒後再 retry
+                                    await Task.Delay(1000);
+                                    break;
+                                }
+                            case ConstantModel.MESSAGE_TIVE_UPLOADER_EXIST:
+                                {
+                                    MessageBox.Show(
+                                        $"\nMAC\n {mac}\n\n\n已存在於伺服器。\nalready exists on the server.\n\n請隔離。\nPlease isolate it.",
+                                        "錯誤 WARNING",
+                                        MessageBoxButtons.OK,
+                                        MessageBoxIcon.Warning
+                                    );
+                                    BoxCodeBLL.DeleteLog(mac);
+                                    DeleteLogEntry(listb_InputValue, mac);
+                                    InputModel.ListInputValue.Remove(mac);
+                                    InputModel.InputValueCount--;
+                                    UI_Update(mac, ConstantModel.ERROR_SERVER_VALUE_IS_EXISTED);
+                                    success = true;
+                                    break;
+                                }
+                        }
+                    }
+
+                    await Task.Delay(100);
+                }
+            }
+            finally
+            {
+                _isProcessing = false;
+            }
+        }
+
+
+        private async void tBoxScanBoxID_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (e.KeyChar == (char)Keys.Enter)
+            {
+                if (tBoxScanBoxID.Text.Contains("X12"))
+                {
+                    tBoxScanBoxID.Enabled = false;
+                    bool success = await TiveUploaderBLL.UploaderBoxIdToTiveSystem(
+                        tBoxScanBoxID.Text,
+                        InputModel.ListInputValue
+                    );
+                    // 以下操作會自動在UI上下文執行
+                    if (success)
+                    {
+                        tabControlPanel.SelectTab(ConstantModel.PAGE_CONTROL_HOME_PANEL);
+                        plScanBoxIDWindows.Enabled = false;
+                        plScanBoxIDWindows.Visible = false;
+                        tBoxScanBoxID.Text = "";
+                        InputModel.InputValueCount = 0;
+                        InputModel.ListInputValue.Clear();
+                        UIControlModel.SetTextBoxStatus(tb_model, true, true);
+                    }
+                    else
+                    {
+                        MessageBox.Show("上傳失敗，請檢查網路連線或日誌訊息 \r\n Upload Failed. Please check the network connection or log messages.");
+                        tBoxScanBoxID.Enabled = true;
+                        tBoxScanBoxID.SelectAll();
+                    }
+                }
+                else
+                {
+                    tBoxScanBoxID.Focus();
+                    tBoxScanBoxID.SelectAll();
+                }
+            }
+        }
+        public static void DeleteLogEntry(ListBox listBox, string logMsgToDelete)
+        {
+            var items = listBox.Items.Cast<string>().ToList();
+            int itemIndexToRemove = -1;
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                string currentItem = items[i];
+
+                int splitIndex = currentItem.IndexOf("] ");
+                if (splitIndex > -1)
+                {
+                    string message = currentItem.Substring(splitIndex + 2).Trim();
+
+                    // 比對訊息內容是否相符
+                    if (message == logMsgToDelete.Trim())
+                    {
+                        itemIndexToRemove = i;
+                        break; // 假設日誌訊息是唯一的，找到就可以停止了
+                    }
+                }
+            }
+
+            // 如果找到了要刪除的項目，就從暫時的列表中移除
+            if (itemIndexToRemove > -1)
+            {
+                items.RemoveAt(itemIndexToRemove);
+            }
+
+            //清空 ListBox，並用更新過的列表和正確的編號重新建立所有項目。
+            listBox.Items.Clear();
+            for (int i = 0; i < items.Count; i++)
+            {
+                string oldItem = items[i];
+                int splitIndex = oldItem.IndexOf("] ");
+                if (splitIndex > -1)
+                {
+                    string message = oldItem.Substring(splitIndex + 2).Trim();
+                    // 使用 D6 格式確保編號總是六位數，不足補零
+                    string newItem = $"[{i + 1:D6}] {message}";
+                    listBox.Items.Add(newItem);
+                }
+            }
         }
     }
 }

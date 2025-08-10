@@ -19,6 +19,7 @@ namespace BoxCode.Model
         public const int ERROR_OPEN_PRINT_FILE_ERROR = 8;
         public const int MESSAGE_ENTER_PAGE_REPRINTING = 9;
         public const int MESSAGE_ENTER_PAGE_HOMEPAGE = 10;
+        public const int ERROR_SERVER_VALUE_IS_EXISTED = 11;
 
         public static String AppPath;
         public string CMD_READ_PASS { get; } = "0313";
@@ -27,5 +28,9 @@ namespace BoxCode.Model
         public const int PAGE_CONTROL_REPRINT = 1;
         public const int PAGE_CONTROL_LOADING_PANEL = 2;
         public const int PAGE_CONTROL_PREVIEW_PANEL = 3;
+
+        public const int MESSAGE_TIVE_UPLOADER_PASS  = 1;
+        public const int MESSAGE_TIVE_UPLOADER_FAIL = 2;
+        public const int MESSAGE_TIVE_UPLOADER_EXIST = 3;
     }
 }

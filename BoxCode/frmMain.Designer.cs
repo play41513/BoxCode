@@ -89,6 +89,10 @@
             this.LoadingProcessBar = new Sunny.UI.UIProcessBar();
             this.pictureBox2 = new System.Windows.Forms.PictureBox();
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.plScanBoxIDWindows = new System.Windows.Forms.Panel();
+            this.panel11 = new System.Windows.Forms.Panel();
+            this.lbEnterBoxIdTitle = new System.Windows.Forms.Label();
+            this.tBoxScanBoxID = new System.Windows.Forms.TextBox();
             this.tableLayoutPanelPreView = new System.Windows.Forms.TableLayoutPanel();
             this.panel7 = new System.Windows.Forms.Panel();
             this.panel18 = new System.Windows.Forms.Panel();
@@ -172,6 +176,8 @@
             this.panel10.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).BeginInit();
             this.tabPage1.SuspendLayout();
+            this.plScanBoxIDWindows.SuspendLayout();
+            this.panel11.SuspendLayout();
             this.tableLayoutPanelPreView.SuspendLayout();
             this.panel18.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictboxPreViewReprint)).BeginInit();
@@ -996,6 +1002,7 @@
             // 
             // tabPage1
             // 
+            this.tabPage1.Controls.Add(this.plScanBoxIDWindows);
             this.tabPage1.Controls.Add(this.tableLayoutPanelPreView);
             this.tabPage1.Location = new System.Drawing.Point(4, 4);
             this.tabPage1.Name = "tabPage1";
@@ -1003,6 +1010,50 @@
             this.tabPage1.TabIndex = 3;
             this.tabPage1.Text = "tabPreView";
             this.tabPage1.UseVisualStyleBackColor = true;
+            // 
+            // plScanBoxIDWindows
+            // 
+            this.plScanBoxIDWindows.BackColor = System.Drawing.Color.LightSteelBlue;
+            this.plScanBoxIDWindows.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.plScanBoxIDWindows.Controls.Add(this.panel11);
+            this.plScanBoxIDWindows.Enabled = false;
+            this.plScanBoxIDWindows.Location = new System.Drawing.Point(498, 239);
+            this.plScanBoxIDWindows.Name = "plScanBoxIDWindows";
+            this.plScanBoxIDWindows.Size = new System.Drawing.Size(401, 174);
+            this.plScanBoxIDWindows.TabIndex = 81;
+            this.plScanBoxIDWindows.Visible = false;
+            // 
+            // panel11
+            // 
+            this.panel11.BackColor = System.Drawing.Color.AliceBlue;
+            this.panel11.Controls.Add(this.lbEnterBoxIdTitle);
+            this.panel11.Controls.Add(this.tBoxScanBoxID);
+            this.panel11.Location = new System.Drawing.Point(11, 23);
+            this.panel11.Name = "panel11";
+            this.panel11.Size = new System.Drawing.Size(374, 127);
+            this.panel11.TabIndex = 2;
+            // 
+            // lbEnterBoxIdTitle
+            // 
+            this.lbEnterBoxIdTitle.AutoSize = true;
+            this.lbEnterBoxIdTitle.Font = new System.Drawing.Font("微软雅黑", 15F);
+            this.lbEnterBoxIdTitle.Location = new System.Drawing.Point(33, 22);
+            this.lbEnterBoxIdTitle.Name = "lbEnterBoxIdTitle";
+            this.lbEnterBoxIdTitle.Size = new System.Drawing.Size(306, 32);
+            this.lbEnterBoxIdTitle.TabIndex = 3;
+            this.lbEnterBoxIdTitle.Text = "掃描 BoxID  (Scan BoxID)";
+            // 
+            // tBoxScanBoxID
+            // 
+            this.tBoxScanBoxID.Font = new System.Drawing.Font("微软雅黑", 16F);
+            this.tBoxScanBoxID.ForeColor = System.Drawing.SystemColors.MenuHighlight;
+            this.tBoxScanBoxID.Location = new System.Drawing.Point(11, 66);
+            this.tBoxScanBoxID.Name = "tBoxScanBoxID";
+            this.tBoxScanBoxID.Size = new System.Drawing.Size(353, 43);
+            this.tBoxScanBoxID.TabIndex = 2;
+            this.tBoxScanBoxID.Text = "X12250501B0001";
+            this.tBoxScanBoxID.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
+            this.tBoxScanBoxID.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.tBoxScanBoxID_KeyPress);
             // 
             // tableLayoutPanelPreView
             // 
@@ -1682,6 +1733,9 @@
             this.panel10.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).EndInit();
             this.tabPage1.ResumeLayout(false);
+            this.plScanBoxIDWindows.ResumeLayout(false);
+            this.panel11.ResumeLayout(false);
+            this.panel11.PerformLayout();
             this.tableLayoutPanelPreView.ResumeLayout(false);
             this.tableLayoutPanelPreView.PerformLayout();
             this.panel18.ResumeLayout(false);
@@ -1846,6 +1900,10 @@
         private System.Windows.Forms.Button btnReprintModel2;
         private System.Windows.Forms.PictureBox pictureBox1;
         private System.Windows.Forms.Label lbWorkOrderInfo;
+        private System.Windows.Forms.Panel plScanBoxIDWindows;
+        private System.Windows.Forms.Panel panel11;
+        private System.Windows.Forms.Label lbEnterBoxIdTitle;
+        private System.Windows.Forms.TextBox tBoxScanBoxID;
     }
 }
 
