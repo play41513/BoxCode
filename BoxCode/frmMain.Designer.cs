@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(frmMain));
             this.pageSetupDialog1 = new System.Windows.Forms.PageSetupDialog();
             this.pageSetupDialog2 = new System.Windows.Forms.PageSetupDialog();
@@ -144,6 +145,9 @@
             this.plTitle = new System.Windows.Forms.Panel();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.lbWorkOrderInfo = new System.Windows.Forms.Label();
+            this.contextMenuReprint = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.tsmiChangeDeviceCode = new System.Windows.Forms.ToolStripMenuItem();
+            this.tsmiReWorkPrint = new System.Windows.Forms.ToolStripMenuItem();
             this.tabControlPanel.SuspendLayout();
             this.tabPageMain.SuspendLayout();
             this.tableLayoutPanelHompageRight.SuspendLayout();
@@ -206,6 +210,7 @@
             this.panel14.SuspendLayout();
             this.plTitle.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
+            this.contextMenuReprint.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabControlPanel
@@ -675,6 +680,7 @@
             // 
             // listBoxReprint
             // 
+            this.listBoxReprint.ContextMenuStrip = this.contextMenuReprint;
             this.listBoxReprint.Dock = System.Windows.Forms.DockStyle.Fill;
             this.listBoxReprint.Font = new System.Drawing.Font("微软雅黑", 13F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(136)));
             this.listBoxReprint.FormattingEnabled = true;
@@ -683,6 +689,7 @@
             this.listBoxReprint.Name = "listBoxReprint";
             this.listBoxReprint.Size = new System.Drawing.Size(354, 453);
             this.listBoxReprint.TabIndex = 51;
+            this.listBoxReprint.MouseDown += new System.Windows.Forms.MouseEventHandler(this.listBoxReprint_MouseDown);
             // 
             // panel5
             // 
@@ -1678,6 +1685,29 @@
             this.lbWorkOrderInfo.TabIndex = 26;
             this.lbWorkOrderInfo.Text = " 工單號 :   000-000000000                              工號 :  T00000";
             // 
+            // contextMenuReprint
+            // 
+            this.contextMenuReprint.ImageScalingSize = new System.Drawing.Size(20, 20);
+            this.contextMenuReprint.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.tsmiChangeDeviceCode,
+            this.tsmiReWorkPrint});
+            this.contextMenuReprint.Name = "contextMenuReprint";
+            this.contextMenuReprint.Size = new System.Drawing.Size(188, 52);
+            // 
+            // tsmiChangeDeviceCode
+            // 
+            this.tsmiChangeDeviceCode.Name = "tsmiChangeDeviceCode";
+            this.tsmiChangeDeviceCode.Size = new System.Drawing.Size(210, 24);
+            this.tsmiChangeDeviceCode.Text = "更改裝置MAC碼";
+            this.tsmiChangeDeviceCode.Click += new System.EventHandler(this.tsmiChangeDeviceCode_Click);
+            // 
+            // tsmiReWorkPrint
+            // 
+            this.tsmiReWorkPrint.Name = "tsmiReWorkPrint";
+            this.tsmiReWorkPrint.Size = new System.Drawing.Size(210, 24);
+            this.tsmiReWorkPrint.Text = "重工列印貼紙";
+            this.tsmiReWorkPrint.Click += new System.EventHandler(this.tsmiReWorkPrint_Click);
+            // 
             // frmMain
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
@@ -1784,6 +1814,7 @@
             this.plTitle.ResumeLayout(false);
             this.plTitle.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
+            this.contextMenuReprint.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -1904,6 +1935,9 @@
         private System.Windows.Forms.Panel panel11;
         private System.Windows.Forms.Label lbEnterBoxIdTitle;
         private System.Windows.Forms.TextBox tBoxScanBoxID;
+        private System.Windows.Forms.ContextMenuStrip contextMenuReprint;
+        private System.Windows.Forms.ToolStripMenuItem tsmiChangeDeviceCode;
+        private System.Windows.Forms.ToolStripMenuItem tsmiReWorkPrint;
     }
 }
 

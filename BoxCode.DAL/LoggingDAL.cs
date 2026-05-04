@@ -7,6 +7,7 @@ using System.IO;
 using BoxCode.Model;
 using System.Text.RegularExpressions;
 using System.Security.Cryptography;
+using System.Diagnostics;
 
 namespace BoxCode.DAL
 {
@@ -15,6 +16,72 @@ namespace BoxCode.DAL
         private static String logPath = "C:\\ASMP\\log\\BoxCode\\"; //Log目錄
         private static String logFileName = WorkOrderModel.WorkOrder + ".csv";
         private static String fullPath = Path.Combine(logPath, logFileName);
+
+        // --- NAS Log 設定 (新增) ---
+        private static readonly string nasBasePath = @"\\192.168.14.26\swtool\logs\OE-TR01";
+        private static readonly string nasUser = "user1234";
+        private static readonly string nasPassword = "user1234";
+        // 對於非網域環境的 NAS，domain 通常是其主機名稱或 IP
+        private static readonly string nasDomain = "192.168.14.26";
+
+
+
+        private static void SyncLogToNas(IEnumerable<string> linesToSync)
+        {
+            string nasFullPath = Path.Combine(nasBasePath, logFileName);
+
+            try
+            {
+                // --- 嘗試 1: 使用當前使用者權限直接寫入 ---
+                // 這種方式適用於執行程式的電腦已登入網域，且該網域帳號有權限的狀況
+                Debug.WriteLine("NAS Sync: 嘗試使用當前使用者權限直接存取...");
+                Directory.CreateDirectory(nasBasePath);
+                File.WriteAllLines(nasFullPath, linesToSync);
+                Debug.WriteLine("NAS Sync: 直接存取成功。");
+                return; // 成功就結束
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Debug.WriteLine("NAS Sync: 直接存取權限不足。將嘗試使用提供的後備帳密...");
+                // 如果沒有提供後備帳密，就直接結束
+                if (string.IsNullOrEmpty(nasUser))
+                {
+                    Debug.WriteLine("NAS Sync: 未設定後備帳密，同步中止。");
+                    return;
+                }
+                // 若權限不足，則繼續執行下面的後備方案
+            }
+            catch (IOException ioEx)
+            {
+                // 如果是網路路徑找不到等 I/O 問題，更換帳密也沒用，直接報錯並返回
+                Debug.WriteLine($"NAS Sync: 發生網路 I/O 錯誤，NAS 可能已離線。錯誤: {ioEx.Message}");
+                return;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"NAS Sync: 嘗試直接存取時發生未預期的錯誤。錯誤: {ex.Message}");
+                return;
+            }
+
+            // --- 嘗試 2: 使用指定的後備帳密進行模擬 (Impersonation) ---
+            // 只有在第一次嘗試因「權限不足」失敗時，才會執行到這裡
+            try
+            {
+                Debug.WriteLine("NAS Sync: 嘗試使用後備帳密進行存取...");
+                using (new NetworkImpersonator(nasUser, nasPassword, nasDomain))
+                {
+                    Directory.CreateDirectory(nasBasePath);
+                    File.WriteAllLines(nasFullPath, linesToSync);
+                    Debug.WriteLine("NAS Sync: 使用後備帳密存取成功。");
+                }
+            }
+            catch (Exception ex)
+            {
+                // 如果連使用後備帳密都失敗，記錄錯誤
+                Debug.WriteLine($"NAS Sync: 使用後備帳密存取失敗。請檢查後備帳密是否正確。錯誤: {ex.Message}");
+            }
+        }
+
         public static void WriteLog(String logMsg)
         {
             // 確認資料夾和檔案是否存在，不存在則建立
@@ -25,36 +92,55 @@ namespace BoxCode.DAL
             }
 
             // 讀取檔案中的內容來檢查最後一行的數據個數
-            int countInLastLine = 0;
-            string[] lines = File.ReadAllLines(fullPath);
-            if (lines.Length > 0)
+
+            var lines = new List<string>();
+            if (File.Exists(fullPath))
             {
-                string lastLine = lines[lines.Length - 1];
-                countInLastLine = lastLine.Split(',').Length;
+                lines = File.ReadAllLines(fullPath).ToList();
+            }
+            while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines.Last()))
+            {
+                lines.RemoveAt(lines.Count - 1);
+            }
+            int countInLastLine = 0;
+            if (lines.Count > 0 && !lines.Last().StartsWith("Box") && !string.IsNullOrWhiteSpace(lines.Last()))
+            {
+                countInLastLine = lines.Last().Split(',').Length;
             }
             // 一列多少數據
             int LineCount = BarTenderModel.PACKING_NUMBER == "50" ? 5 : 8;
             // 判斷列是否已經數據已滿，若已滿，則換行
-            using (
-                StreamWriter sw = File.AppendText(fullPath))
+            // 條件A: 最後一行是資料行，且尚未寫滿
+            if (countInLastLine > 0 && countInLastLine < LineCount)
             {
+                // 直接在最後一行後面附加資料
+                lines[lines.Count - 1] += "," + logMsg;
+            }
+            // 條件B: 需要新增一行來寫入資料 (包含檔案是空的、最後一行是 "Box"、或最後一行資料已滿)
+            else
+            {
+                // 在此處處理新增 "Box" 標頭的邏輯 (保留您原始的判斷)
                 if (countInLastLine % LineCount == 0 && countInLastLine != 0)
                 {
-                    sw.WriteLine(); // 換行
-                    if (InputModel.InputValueCount == Int32.Parse(WorkOrderModel.PACKING_NUMBER)
-                        || InputModel.InputValueCount == 0)
-                        sw.WriteLine("Box" + BarTenderModel.NOW_BOX_COUNT);                      
+                    if (InputModel.InputValueCount == int.Parse(WorkOrderModel.PACKING_NUMBER) || InputModel.InputValueCount == 0)
+                    {
+                        lines.Add("Box" + BarTenderModel.NOW_BOX_COUNT);
+                    }
                 }
-                if (countInLastLine % LineCount == 0)
-                {
-                    if (InputModel.InputValueCount == 1)
-                        sw.WriteLine("Box"+BarTenderModel.NOW_BOX_COUNT);
-                    sw.Write(logMsg);
-                }
-                else
-                    sw.Write("," + logMsg);
 
+                if (InputModel.InputValueCount == 1)
+                {
+                    if (lines.Count == 0 || !lines.Last().StartsWith("Box" + BarTenderModel.NOW_BOX_COUNT))
+                    {
+                        lines.Add("Box" + BarTenderModel.NOW_BOX_COUNT);
+                    }
+                }
+
+                // 最後，將新的 logMsg 作為一個新行加入
+                lines.Add(logMsg);
             }
+            File.WriteAllLines(fullPath, lines);
+            SyncLogToNas(lines);
             SaveToCSV(logMsg);
         }
         public static bool DeleteLog(string logMsgToDelete)
@@ -105,7 +191,7 @@ namespace BoxCode.DAL
                     return true;
                 }
 
-                // 5. 【核心】重建最後一個 box 的內容
+                // 5. 重建最後一個 box 的內容
                 var rebuiltLastBoxLines = new List<string>();
                 int lineCount = BarTenderModel.PACKING_NUMBER == "50" ? 5 : 8;
 
@@ -126,13 +212,14 @@ namespace BoxCode.DAL
                     }
                 }
                 // 如果 lastBoxMessages 為空，rebuiltLastBoxLines 也會是空的，
-                // 這意味著最後一個 box 在刪除後變空了，它將被自然地移除。
+                // 這意味著最後一個 box 在刪除後變空了，它將被移除。
 
                 // 6. 合併不變的部分和重建後的部分
                 untouchedLines.AddRange(rebuiltLastBoxLines);
 
                 // 7. 將最終內容寫回檔案
                 File.WriteAllLines(fullPath, untouchedLines);
+                SyncLogToNas(untouchedLines);
                 return true;
             }
             catch (Exception ex)
@@ -178,6 +265,7 @@ namespace BoxCode.DAL
                 updatedLines[BoxNumberLineIndex] = string.Concat(updatedLines[BoxNumberLineIndex], "-"+BoxId);
                 // 將更新後的行寫回記錄檔。
                 File.WriteAllLines(fullPath, updatedLines);
+                SyncLogToNas(updatedLines);
             }
         }
         public static bool SaveToCSV(String mac)
@@ -261,39 +349,45 @@ namespace BoxCode.DAL
                 InputModel.InputValueCount = 0;
                 return;
             }
+            // 將檔案所有行讀取到一個 List 中
+            var lines = File.ReadAllLines(fullPath).ToList();
 
-            // 讀取檔案中的內容來檢查最後一行的數據個數
-            int countInLastLine = 0;
-            string[] lines = File.ReadAllLines(fullPath);
-            if (lines.Length > 0)
+            // 移除所有在檔案結尾的空行或僅包含空白的行
+            while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines.Last()))
+            {
+                lines.RemoveAt(lines.Count - 1);
+            }
+
+            // 根據清理後的行數來判斷
+            if (lines.Count > 0)
             {
                 int InputNumber = 0;
-                string lastLine;
-                int iLineLength = lines.Length - 1;
+                // 從List 的結尾開始循環
+                int iLineLength = lines.Count - 1;
                 while (true)
                 {
-                    lastLine = lines[iLineLength];
+                    string lastLine = lines[iLineLength];
                     if (lastLine.Contains("Box"))
                     {
                         int iPos = lastLine.IndexOf('-');
 
-                        BarTenderModel.NOW_BOX_COUNT 
+                        BarTenderModel.NOW_BOX_COUNT
                             = iPos > 0 ? lastLine.Substring(3, iPos - 3) : lastLine.Substring(3, lastLine.Length - 3);
 
-                        if (InputNumber >= Int32.Parse(WorkOrderModel.PACKING_NUMBER))
+                        if (InputNumber >= int.Parse(WorkOrderModel.PACKING_NUMBER))
                         {//讀到Box段之前 數量已達到該Box滿  故Box數+1
                             InputModel.ListInputValue.Clear();
                             InputModel.InputValueCount = 0;
-                            BarTenderModel.NOW_BOX_COUNT = (Int32.Parse(BarTenderModel.NOW_BOX_COUNT) + 1).ToString();
+                            BarTenderModel.NOW_BOX_COUNT = (int.Parse(BarTenderModel.NOW_BOX_COUNT) + 1).ToString();
                         }
                         break;
                     }
                     else
                     {
-                        countInLastLine = lastLine.Split(',').Length;
+                        int countInLastLine = lastLine.Split(',').Length;
                         InputNumber += countInLastLine;
                         string[] fields = lastLine.Split(',');
-                        InputModel.ListInputValue.InsertRange(0,fields);
+                        InputModel.ListInputValue.InsertRange(0, fields);
                         InputModel.InputValueCount = InputNumber;
                         iLineLength--;
                         if (iLineLength < 0)
@@ -306,7 +400,7 @@ namespace BoxCode.DAL
                     }
                 }
             }
-            else
+            else // 如果檔案是空的，或只包含空行
             {
                 InputModel.ListInputValue.Clear();
                 InputModel.InputValueCount = 0;

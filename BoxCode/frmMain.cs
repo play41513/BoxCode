@@ -14,6 +14,7 @@ using BoxCode.Model;
 using System.Threading;
 using System.Security.Cryptography;
 using NLog;
+using Microsoft.VisualBasic;
 
 namespace BoxCode
 {
@@ -142,12 +143,7 @@ namespace BoxCode
                         }
                         //
                         if (InputModel.InputValueCount == Int32.Parse(WorkOrderModel.PACKING_NUMBER))
-                        {
-                            while (true)
-                            {   //等待MAC Queue清空
-                                if (_macQueue.Any()) break;
-                                Thread.Sleep(100);
-                            }
+                        {                            
                             if (InputModel.InputValueCount == Int32.Parse(WorkOrderModel.PACKING_NUMBER))
                             {
                                 //數量到達裝箱數，箱數+1
@@ -241,7 +237,7 @@ namespace BoxCode
                                     , "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
                                 break;
                         }
-                        Application.Exit(); // 關閉應用程式
+                        //Application.Exit(); // 關閉應用程式
                     }));
                 }
             })
@@ -771,6 +767,7 @@ namespace BoxCode
         private void EnmuReprintBoxNumber()
         {
             string[] boxes = BoxCodeBLL.GetReprintBoxNumber().Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            cbReprintBoxNumber.Items.Clear();
             foreach (string box in boxes)
             {
                 cbReprintBoxNumber.Items.Add(box);
@@ -1104,6 +1101,7 @@ namespace BoxCode
                                         MessageBoxButtons.OK,
                                         MessageBoxIcon.Warning
                                     );
+
                                     BoxCodeBLL.DeleteLog(mac);
                                     DeleteLogEntry(listb_InputValue, mac);
                                     InputModel.ListInputValue.Remove(mac);
@@ -1200,9 +1198,132 @@ namespace BoxCode
                 {
                     string message = oldItem.Substring(splitIndex + 2).Trim();
                     // 使用 D6 格式確保編號總是六位數，不足補零
-                    string newItem = $"[{i + 1:D6}] {message}";
+                    string newItem = $"[{i + 1:D6}]   {message}";
                     listBox.Items.Add(newItem);
                 }
+            }
+        }
+
+        private void listBoxReprint_MouseDown(object sender, MouseEventArgs e)
+        {
+            // 自動選中滑鼠右鍵點擊的項
+            int index = listBoxReprint.IndexFromPoint(e.Location);
+            if (index != ListBox.NoMatches)
+            {
+                listBoxReprint.SelectedIndex = index;
+                contextMenuReprint.Show(listBoxReprint, e.Location);
+            }
+        }
+
+        private async void tsmiChangeDeviceCode_Click(object sender, EventArgs e)
+        {
+            if (listBoxReprint.SelectedItem == null) return;
+
+            string oldDeviceCode = listBoxReprint.SelectedItem.ToString().Substring(11);
+            string newDeviceCode = Microsoft.VisualBasic.Interaction.InputBox(
+                $"原裝置碼: {oldDeviceCode}\n請輸入新的裝置碼：", "更改裝置碼", oldDeviceCode);
+
+            if (!string.IsNullOrEmpty(newDeviceCode) && newDeviceCode != oldDeviceCode)
+            {
+                // 1. 更新 UI 列表
+                int index = listBoxReprint.SelectedIndex;
+                listBoxReprint.Items[index] = $"[{(index + 1).ToString("D6")}]   {newDeviceCode}";             
+                // 2. 呼叫 TiveUploaderBLL 進行註冊
+                try
+                {
+                    int result = await BoxCode.BLL.TiveUploaderBLL.RegisterBeaconAsync(
+                        macAddress: newDeviceCode,
+                        deviceName: newDeviceCode,
+                        partNumber: "300079",
+                        manufacturingDate: DateTimeOffset.Now.ToString("yyyy-MM-ddTHH:mm:ss+08:00"),
+                        manufacturingLot: BoxCode.Model.WorkOrderModel.WorkOrder
+                    );
+
+                    if (result == BoxCode.Model.ConstantModel.MESSAGE_TIVE_UPLOADER_PASS || result == BoxCode.Model.ConstantModel.MESSAGE_TIVE_UPLOADER_EXIST)
+                    {
+                        // 3. 更新本機 CSV 檔案內容 (C:\ASMP\log\BoxCode\{WorkOrder}.csv)
+                        try
+                        {
+                            string filePath = $@"C:\ASMP\log\BoxCode\{BoxCode.Model.WorkOrderModel.WorkOrder}.csv";
+                            if (System.IO.File.Exists(filePath))
+                            {
+                                // 讀取所有行
+                                string content = System.IO.File.ReadAllText(filePath);
+                                string updatedContent = content.Replace(oldDeviceCode, newDeviceCode);
+
+                                // 寫回檔案
+                                System.IO.File.WriteAllText(filePath, updatedContent);
+                                BoxCodeBLL.SaveCSV(newDeviceCode);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"更新本地CSV失敗: {ex.Message}");
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("Tive 註冊回應異常。");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Tive 註冊失敗: {ex.Message}");
+                }
+            }
+        }
+
+        private void tsmiReWorkPrint_Click(object sender, EventArgs e)
+        {
+            if (listBoxReprint.SelectedItem == null) return;
+
+            // 1. 取得選中的箱號資訊 (假設您的 listBox 內顯示的是箱號，例如 "1")
+            string selectedBoxNumber = cbReprintBoxNumber.SelectedItem.ToString();
+
+            // 2. 重工前置作業：從 DAL/BLL 取得該箱的歷史內容並填入 Reprint 專用的 Model
+            // 根據您的 BoxCodeBLL.cs，重工是讀取 InputModel.ListReprintValue
+            string boxContent = BoxCode.BLL.BoxCodeBLL.GetBoxContent(selectedBoxNumber);
+            if (!string.IsNullOrEmpty(boxContent))
+            {
+                InputModel.ListInputValue = boxContent.Split(',').ToList();
+                InputModel.InputValueCount = InputModel.ListInputValue.Count;
+            }
+            else
+            {
+                MessageBox.Show($"找不到第 {selectedBoxNumber} 箱的內容。");
+                return;
+            }
+
+            // 3. 跳轉頁面
+            this.tabControlPanel.SelectedTab = this.tabPage1;
+
+            // 4. 執行列印作業 (參照您的 frmMain.cs 邏輯，但改為呼叫重工方法)
+            plResult.Text = "重工列印中...";
+            UI_Update(tb_model.Text, ConstantModel.MESSAGE_PRINTING);
+            UIControlModel.SetTextBoxStatus(tb_model, false, true);
+
+            // 調用 BLL 層專門為重工設計的方法 RePint_PackingModel
+            // 該方法內部會處理 GetMinMaxValue(InputModel.ListReprintValue) 並執行列印
+            if (BoxCode.BLL.BoxCodeBLL.RePint_PackingModel(selectedBoxNumber) == 0)
+            {
+                plResult.Text = "BOX " + selectedBoxNumber + " 重工列印完成";
+                plResult.FillColor = Color.Green;
+                UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
+                PreViewModel.PreViewPageIndex = 1;
+
+                // 判斷是否上傳 TIVE 並顯示預覽
+                if (BarTenderModel.PACKING_NUMBER == "50")
+                    Pint_PreViewForTIVE();
+                else
+                    Pint_PreView();
+            }
+            else
+            {
+                plResult.Text = "重工列印失敗";
+                plResult.FillColor = Color.Red;
+                UI_Update(tb_model.Text, ConstantModel.ERROR_PRINT_FAIL);
+                UIControlModel.SetTextBoxStatus(tb_model, true, true);
             }
         }
     }

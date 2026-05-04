@@ -16,7 +16,7 @@ namespace BoxCode.BLL
     {
         public string status { get; set; }
         public string message { get; set; }
-        public object data { get; set; }  // 若你知道 data 的具體格式可以用具體型別
+        public object data { get; set; }  
         public string processId { get; set; }
     }
     public class TiveUploaderBLL
@@ -38,11 +38,11 @@ namespace BoxCode.BLL
         static TiveUploaderBLL()
         {
             Client = new HttpClient();
-            Client.Timeout = TimeSpan.FromSeconds(5);
+            Client.Timeout = TimeSpan.FromSeconds(10);
             Client.DefaultRequestHeaders.Add("X-API-Key", apiKey);
             Client.DefaultRequestHeaders.Add("nebula-api-user", apiUser);
             Client.DefaultRequestHeaders.Add("nebula-api-key", apiUserKey);
-            Client.Timeout = TimeSpan.FromSeconds(3);
+            Client.Timeout = TimeSpan.FromSeconds(10);
         }
         public static async Task<bool> UploaderBoxIdToTiveSystem(string BoxID, List<string> bleMacList)
         {
@@ -93,7 +93,8 @@ namespace BoxCode.BLL
         {
             var url = baseUrl + "register/beacon";
 
-            var body = new
+            // 1. 建立請求的 body 物件
+            var requestBody = new
             {
                 MacAddress = macAddress,
                 DeviceName = deviceName,
@@ -102,25 +103,33 @@ namespace BoxCode.BLL
                 ManufacturingLot = manufacturingLot
             };
 
-            string json = JsonConvert.SerializeObject(body);
+            string requestJson = JsonConvert.SerializeObject(requestBody);
 
-            using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
+            // 執行前先記錄準備發送的資料
+            NLogDAL.Instance.LogInfo(new NLogModel($"傳送的資料 MAC: {macAddress}", $"傳送的資料結構: {requestJson}"));
+
+            try
             {
-                try
+                using (var content = new StringContent(requestJson, Encoding.UTF8, "application/json"))
                 {
+                    // 發送請求並獲取回應
                     var response = await Client.PostAsync(url, content);
-                    string result = await response.Content.ReadAsStringAsync();
-                    // 解析 JSON 字串為物件
-                    var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(result);
-                    string status = apiResponse.status;
-                    string message = apiResponse.message;
-                    string processId = apiResponse.processId;
-                    if(status == "error")
+                    string responseJson = await response.Content.ReadAsStringAsync();
+
+                    // 4. 解析業務邏輯的回應
+                    var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(responseJson);
+
+                    string logMessage = $"Registering beacon for MAC: {macAddress}. API Status: '{apiResponse.status}', Message: '{apiResponse.message}'.";
+                    string logContext = $"Request: {requestJson}\nResponse: {responseJson}";
+
+                    // 5.根據 API 回應的 status 欄位進行處理
+                    if (apiResponse.status == "error")
                     {
-                        NLogDAL.Instance.LogWarning(new NLogModel("Status : " + status + "\r\n Message: " + message, "INFO"));
-                        if (message.Contains("Device registration already exists"))
+                        // 已知的業務錯誤：裝置已存在
+                        if (apiResponse.message.Contains("Device registration already exists"))
                         {
-                            Console.WriteLine("已重複: Device registration already exists" );
+                            NLogDAL.Instance.LogWarning(new NLogModel(logMessage, logContext)); // 建議使用 LogWarning
+                            Console.WriteLine($"Beacon already exists: {macAddress}");
                             return ConstantModel.MESSAGE_TIVE_UPLOADER_EXIST;
                             /*
                             url = baseUrl + "register/beacon/" + macAddress;
@@ -139,38 +148,44 @@ namespace BoxCode.BLL
                             NLogDAL.Instance.LogWarning(new NLogModel("MAC: " + macAddress, "INFO"));
                             NLogDAL.Instance.LogWarning(new NLogModel("回應內容: " + result, "INFO"));
                             if (status == "error")
-                                return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;*/
+                            return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;*/
                         }
-                        else
+                        else // 其他未知的業務錯誤
                         {
-                            Console.WriteLine("伺服器回應狀態: " + response.StatusCode);
-                            Console.WriteLine("MAC: " + macAddress);
-                            Console.WriteLine("回應內容: " + result);
-                            NLogDAL.Instance.LogWarning(new NLogModel("伺服器回應狀態: " + response.StatusCode, "INFO"));
-                            NLogDAL.Instance.LogWarning(new NLogModel("MAC: " + macAddress, "INFO"));
-                            NLogDAL.Instance.LogWarning(new NLogModel("回應內容: " + result, "INFO"));
+                            NLogDAL.Instance.LogError(new NLogModel($"An unexpected business error occurred. {logMessage}", logContext)); // 建議使用 LogError
+                            Console.WriteLine($"An unexpected error occurred for MAC: {macAddress}");
                             return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;
                         }
                     }
+                    else if (!response.IsSuccessStatusCode)
+                    {
+                        // 記錄完整的請求與回應資訊
+                        string httpErrorInfo = $"HTTP request failed. Status Code: {response.StatusCode}. MAC: {macAddress}.";
+                        string fullContext = $"Request: {requestJson}\nResponse: {responseJson}";
+                        NLogDAL.Instance.LogError(new NLogModel(httpErrorInfo, fullContext)); // 建議使用 LogError
 
-                    Console.WriteLine("伺服器回應狀態: " + response.StatusCode);
-                    Console.WriteLine("MAC: " + macAddress);
-                    Console.WriteLine("回應內容: " + result);
-                    NLogDAL.Instance.LogWarning(new NLogModel("伺服器回應狀態: " + response.StatusCode, "INFO"));
-                    NLogDAL.Instance.LogWarning(new NLogModel("MAC: " + macAddress, "INFO"));
-                    NLogDAL.Instance.LogWarning(new NLogModel("回應內容: " + result, "INFO"));
-
-                    // 根據 HTTP 狀態碼判斷是否成功
-                    if(response.IsSuccessStatusCode)
-                        return ConstantModel.MESSAGE_TIVE_UPLOADER_PASS;
-                    return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("發送失敗: " + ex.Message);
-                    return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;
+                        Console.WriteLine(httpErrorInfo);
+                        return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;
+                    }
+                    // 6. 處理成功的情況
+                    NLogDAL.Instance.LogInfo(new NLogModel(logMessage, logContext)); // 建議使用 LogInfo
+                    Console.WriteLine($"Successfully registered MAC: {macAddress}");
+                    return ConstantModel.MESSAGE_TIVE_UPLOADER_PASS;
                 }
             }
+            catch (Exception ex)
+            {
+                // 處理網路請求層級的異常 (例如 timeout, DNS 解析失敗)
+                string exceptionInfo = $"Failed to send request for MAC: {macAddress}.";
+                // 在異常日誌中包含當時準備發送的資料和完整的 Exception 資訊 (包含堆疊追蹤)
+                string exceptionContext = $"Request Body: {requestJson}\nException: {ex.ToString()}";
+                NLogDAL.Instance.LogError(new NLogModel(exceptionInfo, exceptionContext));
+
+                Console.WriteLine($"{exceptionInfo} Error: {ex.Message}");
+                return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;
+            }
+
+
         }
         public static async Task<bool> RegisterBoxAsync( 
            string BoxID,
@@ -181,6 +196,7 @@ namespace BoxCode.BLL
             var body = new
             {
                 boxId = BoxID,
+                partNumber = "300079",
                 contents = bleMacList
             };
 

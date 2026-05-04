@@ -424,6 +424,10 @@ namespace BoxCode.BLL
         {
             LoggingDAL.WriteLog(logMsg);
         }
+        public static void SaveCSV(String mac)
+        {
+            LoggingDAL.SaveToCSV(mac);
+        }
         public static void DeleteLog(String logMsg)
         {
             LoggingDAL.DeleteLog(logMsg);
