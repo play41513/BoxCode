@@ -93,7 +93,6 @@ namespace BoxCode.BLL
         {
             var url = baseUrl + "register/beacon";
 
-            // 1. 建立請求的 body 物件
             var requestBody = new
             {
                 MacAddress = macAddress,
@@ -105,27 +104,22 @@ namespace BoxCode.BLL
 
             string requestJson = JsonConvert.SerializeObject(requestBody);
 
-            // 執行前先記錄準備發送的資料
             NLogDAL.Instance.LogInfo(new NLogModel($"傳送的資料 MAC: {macAddress}", $"傳送的資料結構: {requestJson}"));
 
             try
             {
                 using (var content = new StringContent(requestJson, Encoding.UTF8, "application/json"))
                 {
-                    // 發送請求並獲取回應
                     var response = await Client.PostAsync(url, content);
                     string responseJson = await response.Content.ReadAsStringAsync();
 
-                    // 4. 解析業務邏輯的回應
                     var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(responseJson);
 
                     string logMessage = $"Registering beacon for MAC: {macAddress}. API Status: '{apiResponse.status}', Message: '{apiResponse.message}'.";
                     string logContext = $"Request: {requestJson}\nResponse: {responseJson}";
 
-                    // 5.根據 API 回應的 status 欄位進行處理
                     if (apiResponse.status == "error")
                     {
-                        // 已知的業務錯誤：裝置已存在
                         if (apiResponse.message.Contains("Device registration already exists"))
                         {
                             NLogDAL.Instance.LogWarning(new NLogModel(logMessage, logContext)); // 建議使用 LogWarning
@@ -150,7 +144,7 @@ namespace BoxCode.BLL
                             if (status == "error")
                             return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;*/
                         }
-                        else // 其他未知的業務錯誤
+                        else 
                         {
                             NLogDAL.Instance.LogError(new NLogModel($"An unexpected business error occurred. {logMessage}", logContext)); // 建議使用 LogError
                             Console.WriteLine($"An unexpected error occurred for MAC: {macAddress}");
@@ -162,22 +156,20 @@ namespace BoxCode.BLL
                         // 記錄完整的請求與回應資訊
                         string httpErrorInfo = $"HTTP request failed. Status Code: {response.StatusCode}. MAC: {macAddress}.";
                         string fullContext = $"Request: {requestJson}\nResponse: {responseJson}";
-                        NLogDAL.Instance.LogError(new NLogModel(httpErrorInfo, fullContext)); // 建議使用 LogError
+                        NLogDAL.Instance.LogError(new NLogModel(httpErrorInfo, fullContext)); 
 
                         Console.WriteLine(httpErrorInfo);
                         return ConstantModel.MESSAGE_TIVE_UPLOADER_FAIL;
                     }
-                    // 6. 處理成功的情況
-                    NLogDAL.Instance.LogInfo(new NLogModel(logMessage, logContext)); // 建議使用 LogInfo
+                    NLogDAL.Instance.LogInfo(new NLogModel(logMessage, logContext));
                     Console.WriteLine($"Successfully registered MAC: {macAddress}");
                     return ConstantModel.MESSAGE_TIVE_UPLOADER_PASS;
                 }
             }
             catch (Exception ex)
             {
-                // 處理網路請求層級的異常 (例如 timeout, DNS 解析失敗)
                 string exceptionInfo = $"Failed to send request for MAC: {macAddress}.";
-                // 在異常日誌中包含當時準備發送的資料和完整的 Exception 資訊 (包含堆疊追蹤)
+                // 包含當時準備發送的資料和完整的 Exception 資訊 
                 string exceptionContext = $"Request Body: {requestJson}\nException: {ex.ToString()}";
                 NLogDAL.Instance.LogError(new NLogModel(exceptionInfo, exceptionContext));
 
@@ -208,7 +200,7 @@ namespace BoxCode.BLL
                 {
                     var response = await Client.PostAsync(url, content);
                     string result = await response.Content.ReadAsStringAsync();
-                    // 解析 JSON 字串為物件
+                    // 解析 JSON 字串
                     var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(result);
                     string status = apiResponse.status;
                     string message = apiResponse.message;

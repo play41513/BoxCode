@@ -62,6 +62,9 @@
             this.tableLayoutPanel5 = new System.Windows.Forms.TableLayoutPanel();
             this.panel6 = new System.Windows.Forms.Panel();
             this.listBoxReprint = new System.Windows.Forms.ListBox();
+            this.contextMenuReprint = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.tsmiChangeDeviceCode = new System.Windows.Forms.ToolStripMenuItem();
+            this.tsmiReWorkPrint = new System.Windows.Forms.ToolStripMenuItem();
             this.panel5 = new System.Windows.Forms.Panel();
             this.cbReprintBoxNumber = new System.Windows.Forms.ComboBox();
             this.label5 = new System.Windows.Forms.Label();
@@ -145,9 +148,6 @@
             this.plTitle = new System.Windows.Forms.Panel();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.lbWorkOrderInfo = new System.Windows.Forms.Label();
-            this.contextMenuReprint = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.tsmiChangeDeviceCode = new System.Windows.Forms.ToolStripMenuItem();
-            this.tsmiReWorkPrint = new System.Windows.Forms.ToolStripMenuItem();
             this.tabControlPanel.SuspendLayout();
             this.tabPageMain.SuspendLayout();
             this.tableLayoutPanelHompageRight.SuspendLayout();
@@ -160,6 +160,7 @@
             this.ReprintView.SuspendLayout();
             this.tableLayoutPanel5.SuspendLayout();
             this.panel6.SuspendLayout();
+            this.contextMenuReprint.SuspendLayout();
             this.panel5.SuspendLayout();
             this.plReprintRightPage.SuspendLayout();
             this.tableLayoutPanel4.SuspendLayout();
@@ -210,7 +211,6 @@
             this.panel14.SuspendLayout();
             this.plTitle.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
-            this.contextMenuReprint.SuspendLayout();
             this.SuspendLayout();
             // 
             // tabControlPanel
@@ -690,6 +690,29 @@
             this.listBoxReprint.Size = new System.Drawing.Size(354, 453);
             this.listBoxReprint.TabIndex = 51;
             this.listBoxReprint.MouseDown += new System.Windows.Forms.MouseEventHandler(this.listBoxReprint_MouseDown);
+            // 
+            // contextMenuReprint
+            // 
+            this.contextMenuReprint.ImageScalingSize = new System.Drawing.Size(20, 20);
+            this.contextMenuReprint.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.tsmiChangeDeviceCode,
+            this.tsmiReWorkPrint});
+            this.contextMenuReprint.Name = "contextMenuReprint";
+            this.contextMenuReprint.Size = new System.Drawing.Size(188, 52);
+            // 
+            // tsmiChangeDeviceCode
+            // 
+            this.tsmiChangeDeviceCode.Name = "tsmiChangeDeviceCode";
+            this.tsmiChangeDeviceCode.Size = new System.Drawing.Size(187, 24);
+            this.tsmiChangeDeviceCode.Text = "更改裝置MAC碼";
+            this.tsmiChangeDeviceCode.Click += new System.EventHandler(this.tsmiChangeDeviceCode_Click);
+            // 
+            // tsmiReWorkPrint
+            // 
+            this.tsmiReWorkPrint.Name = "tsmiReWorkPrint";
+            this.tsmiReWorkPrint.Size = new System.Drawing.Size(187, 24);
+            this.tsmiReWorkPrint.Text = "重工列印貼紙";
+            this.tsmiReWorkPrint.Click += new System.EventHandler(this.tsmiReWorkPrint_Click);
             // 
             // panel5
             // 
@@ -1685,29 +1708,6 @@
             this.lbWorkOrderInfo.TabIndex = 26;
             this.lbWorkOrderInfo.Text = " 工單號 :   000-000000000                              工號 :  T00000";
             // 
-            // contextMenuReprint
-            // 
-            this.contextMenuReprint.ImageScalingSize = new System.Drawing.Size(20, 20);
-            this.contextMenuReprint.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.tsmiChangeDeviceCode,
-            this.tsmiReWorkPrint});
-            this.contextMenuReprint.Name = "contextMenuReprint";
-            this.contextMenuReprint.Size = new System.Drawing.Size(188, 52);
-            // 
-            // tsmiChangeDeviceCode
-            // 
-            this.tsmiChangeDeviceCode.Name = "tsmiChangeDeviceCode";
-            this.tsmiChangeDeviceCode.Size = new System.Drawing.Size(210, 24);
-            this.tsmiChangeDeviceCode.Text = "更改裝置MAC碼";
-            this.tsmiChangeDeviceCode.Click += new System.EventHandler(this.tsmiChangeDeviceCode_Click);
-            // 
-            // tsmiReWorkPrint
-            // 
-            this.tsmiReWorkPrint.Name = "tsmiReWorkPrint";
-            this.tsmiReWorkPrint.Size = new System.Drawing.Size(210, 24);
-            this.tsmiReWorkPrint.Text = "重工列印貼紙";
-            this.tsmiReWorkPrint.Click += new System.EventHandler(this.tsmiReWorkPrint_Click);
-            // 
             // frmMain
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
@@ -1739,6 +1739,7 @@
             this.ReprintView.ResumeLayout(false);
             this.tableLayoutPanel5.ResumeLayout(false);
             this.panel6.ResumeLayout(false);
+            this.contextMenuReprint.ResumeLayout(false);
             this.panel5.ResumeLayout(false);
             this.panel5.PerformLayout();
             this.plReprintRightPage.ResumeLayout(false);
@@ -1814,7 +1815,6 @@
             this.plTitle.ResumeLayout(false);
             this.plTitle.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
-            this.contextMenuReprint.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }

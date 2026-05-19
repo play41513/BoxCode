@@ -22,7 +22,6 @@ namespace BoxCode
     {
         private readonly Queue<string> _macQueue = new Queue<string>();
         private bool _isProcessing = false;
-        private int _failUpLoderCount = 0;
 
         public frmMain()
         {
@@ -1096,17 +1095,17 @@ namespace BoxCode
                             case ConstantModel.MESSAGE_TIVE_UPLOADER_EXIST:
                                 {
                                     MessageBox.Show(
-                                        $"\nMAC\n {mac}\n\n\n已存在於伺服器。\nalready exists on the server.\n\n請隔離。\nPlease isolate it.",
+                                        $"\nMAC\n {mac}\n\n\n已存在於伺服器。\nalready exists on the server.",
                                         "錯誤 WARNING",
                                         MessageBoxButtons.OK,
                                         MessageBoxIcon.Warning
                                     );
-
+                                    /* 暫不刪除，僅提示警告
                                     BoxCodeBLL.DeleteLog(mac);
                                     DeleteLogEntry(listb_InputValue, mac);
                                     InputModel.ListInputValue.Remove(mac);
                                     InputModel.InputValueCount--;
-                                    UI_Update(mac, ConstantModel.ERROR_SERVER_VALUE_IS_EXISTED);
+                                    UI_Update(mac, ConstantModel.ERROR_SERVER_VALUE_IS_EXISTED);*/
                                     success = true;
                                     break;
                                 }
@@ -1134,7 +1133,7 @@ namespace BoxCode
                         tBoxScanBoxID.Text,
                         InputModel.ListInputValue
                     );
-                    // 以下操作會自動在UI上下文執行
+
                     if (success)
                     {
                         tabControlPanel.SelectTab(ConstantModel.PAGE_CONTROL_HOME_PANEL);
@@ -1177,7 +1176,7 @@ namespace BoxCode
                     if (message == logMsgToDelete.Trim())
                     {
                         itemIndexToRemove = i;
-                        break; // 假設日誌訊息是唯一的，找到就可以停止了
+                        break; 
                     }
                 }
             }
@@ -1206,7 +1205,6 @@ namespace BoxCode
 
         private void listBoxReprint_MouseDown(object sender, MouseEventArgs e)
         {
-            // 自動選中滑鼠右鍵點擊的項
             int index = listBoxReprint.IndexFromPoint(e.Location);
             if (index != ListBox.NoMatches)
             {
@@ -1217,18 +1215,66 @@ namespace BoxCode
 
         private async void tsmiChangeDeviceCode_Click(object sender, EventArgs e)
         {
-            if (listBoxReprint.SelectedItem == null) return;
+            //最開始跳出視窗讓使用者輸入箱號
+            string inputBoxNumber = Microsoft.VisualBasic.Interaction.InputBox(
+                "請輸入要尋找的箱號：", "步驟 0：定位箱號", "");
 
-            string oldDeviceCode = listBoxReprint.SelectedItem.ToString().Substring(11);
+            if (!string.IsNullOrEmpty(inputBoxNumber))
+            {
+                // 搜尋 cbReprintBoxNumber 哪一項有包含其值
+                int boxIndex = -1;
+                for (int i = 0; i < cbReprintBoxNumber.Items.Count; i++)
+                {
+                    if (cbReprintBoxNumber.Items[i].ToString().Contains(inputBoxNumber))
+                    {
+                        boxIndex = i;
+                        break;
+                    }
+                }
+
+                //cbReprintBoxNumber 切換至該項
+                if (boxIndex != -1)
+                {
+                    cbReprintBoxNumber.SelectedIndex = boxIndex;
+                }
+                else
+                {
+                    MessageBox.Show($"找不到包含箱號 '{inputBoxNumber}' 的項目。", "提示");
+                    return;
+                }
+            }
+
+            string oldDeviceCode = Microsoft.VisualBasic.Interaction.InputBox(
+                "請輸入想要更改的原裝置碼：", "步驟 1：輸入舊號碼", "");
+
+            if (string.IsNullOrEmpty(oldDeviceCode)) return;
+
+            // 檢查該號碼是否存在於 listBoxReprint
+            int targetIndex = -1;
+            for (int i = 0; i < listBoxReprint.Items.Count; i++)
+            {
+                string itemContent = listBoxReprint.Items[i].ToString();
+                if (itemContent.Length > 11 && itemContent.Substring(11).Trim() == oldDeviceCode.Trim())
+                {
+                    targetIndex = i;
+                    break;
+                }
+            }
+
+            if (targetIndex == -1)
+            {
+                MessageBox.Show($"在目前箱號的清單中找不到裝置碼: {oldDeviceCode}", "錯誤");
+                return;
+            }
+
             string newDeviceCode = Microsoft.VisualBasic.Interaction.InputBox(
-                $"原裝置碼: {oldDeviceCode}\n請輸入新的裝置碼：", "更改裝置碼", oldDeviceCode);
+                $"找到舊號碼於位置 {targetIndex + 1}\n請輸入新的裝置碼：", "步驟 2：輸入新號碼", "");
 
             if (!string.IsNullOrEmpty(newDeviceCode) && newDeviceCode != oldDeviceCode)
             {
-                // 1. 更新 UI 列表
-                int index = listBoxReprint.SelectedIndex;
-                listBoxReprint.Items[index] = $"[{(index + 1).ToString("D6")}]   {newDeviceCode}";             
-                // 2. 呼叫 TiveUploaderBLL 進行註冊
+                listBoxReprint.Items[targetIndex] = $"[{(targetIndex + 1).ToString("D6")}]   {newDeviceCode}";
+                listBoxReprint.SelectedIndex = targetIndex;
+
                 try
                 {
                     int result = await BoxCode.BLL.TiveUploaderBLL.RegisterBeaconAsync(
@@ -1239,37 +1285,36 @@ namespace BoxCode
                         manufacturingLot: BoxCode.Model.WorkOrderModel.WorkOrder
                     );
 
-                    if (result == BoxCode.Model.ConstantModel.MESSAGE_TIVE_UPLOADER_PASS || result == BoxCode.Model.ConstantModel.MESSAGE_TIVE_UPLOADER_EXIST)
+                    if (result == BoxCode.Model.ConstantModel.MESSAGE_TIVE_UPLOADER_PASS ||
+                        result == BoxCode.Model.ConstantModel.MESSAGE_TIVE_UPLOADER_EXIST)
                     {
-                        // 3. 更新本機 CSV 檔案內容 (C:\ASMP\log\BoxCode\{WorkOrder}.csv)
                         try
                         {
-                            string filePath = $@"C:\ASMP\log\BoxCode\{BoxCode.Model.WorkOrderModel.WorkOrder}.csv";
-                            if (System.IO.File.Exists(filePath))
-                            {
-                                // 讀取所有行
-                                string content = System.IO.File.ReadAllText(filePath);
-                                string updatedContent = content.Replace(oldDeviceCode, newDeviceCode);
+                            BoxCodeBLL.UpdateLogContent(oldDeviceCode, newDeviceCode);
 
-                                // 寫回檔案
-                                System.IO.File.WriteAllText(filePath, updatedContent);
-                                BoxCodeBLL.SaveCSV(newDeviceCode);
+                            if (InputModel.ListReprintValue != null)
+                            {
+                                int listIndex = InputModel.ListReprintValue.IndexOf(oldDeviceCode);
+                                if (listIndex != -1)
+                                {
+                                    InputModel.ListReprintValue[listIndex] = newDeviceCode;
+                                }
                             }
+                            BoxCodeBLL.SaveCSV(newDeviceCode);
                         }
                         catch (Exception ex)
                         {
-                            MessageBox.Show($"更新本地CSV失敗: {ex.Message}");
-                            return;
+                            MessageBox.Show($"更新數據失敗: {ex.Message}");
                         }
                     }
                     else
                     {
-                        MessageBox.Show("Tive 註冊回應異常。");
+                        MessageBox.Show("Tive 註冊回應異常，請檢查 NLog。");
                     }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Tive 註冊失敗: {ex.Message}");
+                    MessageBox.Show($"Tive 註冊流程發生錯誤: {ex.Message}");
                 }
             }
         }
@@ -1278,16 +1323,18 @@ namespace BoxCode
         {
             if (listBoxReprint.SelectedItem == null) return;
 
-            // 1. 取得選中的箱號資訊 (假設您的 listBox 內顯示的是箱號，例如 "1")
             string selectedBoxNumber = cbReprintBoxNumber.SelectedItem.ToString();
 
-            // 2. 重工前置作業：從 DAL/BLL 取得該箱的歷史內容並填入 Reprint 專用的 Model
-            // 根據您的 BoxCodeBLL.cs，重工是讀取 InputModel.ListReprintValue
             string boxContent = BoxCode.BLL.BoxCodeBLL.GetBoxContent(selectedBoxNumber);
             if (!string.IsNullOrEmpty(boxContent))
             {
-                InputModel.ListInputValue = boxContent.Split(',').ToList();
+                List<string> updatedList = boxContent.Split(',').ToList();
+
+
+                InputModel.ListInputValue = new List<string>(updatedList);
                 InputModel.InputValueCount = InputModel.ListInputValue.Count;
+
+                InputModel.ListReprintValue = new List<string>(updatedList);
             }
             else
             {
@@ -1295,16 +1342,12 @@ namespace BoxCode
                 return;
             }
 
-            // 3. 跳轉頁面
             this.tabControlPanel.SelectedTab = this.tabPage1;
 
-            // 4. 執行列印作業 (參照您的 frmMain.cs 邏輯，但改為呼叫重工方法)
             plResult.Text = "重工列印中...";
             UI_Update(tb_model.Text, ConstantModel.MESSAGE_PRINTING);
             UIControlModel.SetTextBoxStatus(tb_model, false, true);
 
-            // 調用 BLL 層專門為重工設計的方法 RePint_PackingModel
-            // 該方法內部會處理 GetMinMaxValue(InputModel.ListReprintValue) 並執行列印
             if (BoxCode.BLL.BoxCodeBLL.RePint_PackingModel(selectedBoxNumber) == 0)
             {
                 plResult.Text = "BOX " + selectedBoxNumber + " 重工列印完成";
@@ -1312,7 +1355,6 @@ namespace BoxCode
                 UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
                 PreViewModel.PreViewPageIndex = 1;
 
-                // 判斷是否上傳 TIVE 並顯示預覽
                 if (BarTenderModel.PACKING_NUMBER == "50")
                     Pint_PreViewForTIVE();
                 else

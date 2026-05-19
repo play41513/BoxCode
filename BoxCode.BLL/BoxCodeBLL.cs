@@ -268,6 +268,8 @@ namespace BoxCode.BLL
         }
         public static int RePint_PackingModel(string BoxNumber)
         {
+            if (BoxNumber.IndexOf('-') > 0)
+                BoxNumber = BoxNumber.Substring(0, BoxNumber.IndexOf('-'));
             //取得該箱最小最大號值
             BoxCodeBLL.GetMinMaxValue(InputModel.ListReprintValue);
 
@@ -405,7 +407,10 @@ namespace BoxCode.BLL
                 format2.SubStrings["MAC序號2"].Value = "";
             NLogDAL.Instance.LogInfo(new NLogModel("Start to ReView 2 Box" + BoxNumber, "INFO"));
             if (bPrint)
-                rel = format2.Print();//列印
+            {
+                rel = format2.Print();//列印兩張，箱子前後面
+                rel = format2.Print();
+            }
             else
                 rel = Result.Success;
             if (rel != Result.Success)
@@ -427,6 +432,10 @@ namespace BoxCode.BLL
         public static void SaveCSV(String mac)
         {
             LoggingDAL.SaveToCSV(mac);
+        }
+        public static void UpdateLogContent(string oldText, string newText)
+        {
+            LoggingDAL.UpdateLogContent(oldText, newText);
         }
         public static void DeleteLog(String logMsg)
         {
