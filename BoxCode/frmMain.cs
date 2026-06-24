@@ -22,6 +22,8 @@ namespace BoxCode
     {
         private readonly Queue<string> _macQueue = new Queue<string>();
         private bool _isProcessing = false;
+        //記錄目前是不是在做重工列印上傳，如果是，記錄它是哪一箱（例如 "Box1"）
+        private string _reworkTargetBoxNumber = null;
 
         public frmMain()
         {
@@ -62,19 +64,27 @@ namespace BoxCode
         /// 判斷主頁面輸入欄位的值
         /// Validate the Input Fields on the Main Page.
         /// </summary>
-        private void tb_model_KeyPress(object sender, KeyPressEventArgs e)
+        private async void tb_model_KeyPress(object sender, KeyPressEventArgs e)
         {
             if (e.KeyChar == (char)Keys.Enter)
             {
                 UIControlModel.SetTextBoxStatus(tb_model, false, true);
                 plResult.FillColor = Color.White;
-                if (tb_model.Text.Contains("[LastBox]"))
+                string currentInput = tb_model.Text.Trim();
+                if (currentInput.Contains("[LastBox]"))
                 {
-                    while (true)
-                    {   //等待MAC Queue清空
-                        if (_macQueue.Any()) break;
-                        Thread.Sleep(100);
-                    }
+                    plResult.Text = "等待上傳中...";
+                    await Task.Run(() =>
+                    {
+                        while (true)
+                        {
+                            lock (_macQueue)
+                            {
+                                if (!_macQueue.Any()) break;
+                            }
+                            Thread.Sleep(100);
+                        }
+                    });
                     //列印
                     plResult.Text = "列印中...";
                     UI_Update(tb_model.Text, ConstantModel.MESSAGE_PRINTING);
@@ -127,14 +137,13 @@ namespace BoxCode
                     int result = CheckInputValueBLL.CheckInputValue(tb_model.Text);
                     if (result == 0)
                     {
-                        InputModel.ListInputValue.Add(tb_model.Text);
-                        InputModel.InputValueCount++;
-                        plResult.Text = "輸入成功";
-                        // 加入Queue
                         lock (_macQueue)
                         {
-                            _macQueue.Enqueue(tb_model.Text);
+                            InputModel.ListInputValue.Add(currentInput);
+                            InputModel.InputValueCount++;
+                            _macQueue.Enqueue(currentInput);
                         }
+                        plResult.Text = "輸入成功";
                         //如果沒有啟動Process > 啟動
                         if (!_isProcessing)
                         {
@@ -160,7 +169,26 @@ namespace BoxCode
                                     else
                                         Pint_PreView();
                                     BarTenderModel.NOW_BOX_COUNT = (Int32.Parse(BarTenderModel.NOW_BOX_COUNT) + 1).ToString();
-                                    BoxCodeBLL.WriteLog(tb_model.Text);
+                                    bool writeSuccess = false;
+                                    while (!writeSuccess)
+                                    {
+                                        try
+                                        {
+                                            BoxCodeBLL.WriteLog(tb_model.Text);
+                                            writeSuccess = true; // 順利完成則跳出循環
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            MessageBox.Show(
+                                                $"寫入 NAS 伺服器失敗！\n錯誤訊息: {ex.Message}\n\n請檢查網路連線或磁碟狀態，確認正常後按下 [確定] 重新嘗試。",
+                                                "儲存失敗 (NAS 異常)",
+                                                MessageBoxButtons.OK,
+                                                MessageBoxIcon.Warning,
+                                                MessageBoxDefaultButton.Button1,
+                                                MessageBoxOptions.DefaultDesktopOnly
+                                            );
+                                        }
+                                    }
                                 }
                                 else
                                 {
@@ -187,7 +215,26 @@ namespace BoxCode
                             }
                             else
                                 UI_Update(tb_model.Text, result);
-                            BoxCodeBLL.WriteLog(tb_model.Text);
+                            bool writeSuccess = false;
+                            while (!writeSuccess)
+                            {
+                                try
+                                {
+                                    BoxCodeBLL.WriteLog(tb_model.Text);
+                                    writeSuccess = true; // 順利完成則跳出循環
+                                }
+                                catch (Exception ex)
+                                {
+                                    MessageBox.Show(
+                                        $"寫入 NAS 伺服器失敗！\n錯誤訊息: {ex.Message}\n\n請檢查網路連線或磁碟狀態，確認正常後按下 [確定] 重新嘗試。",
+                                        "儲存失敗 (NAS 異常)",
+                                        MessageBoxButtons.OK,
+                                        MessageBoxIcon.Warning,
+                                        MessageBoxDefaultButton.Button1,
+                                        MessageBoxOptions.DefaultDesktopOnly
+                                    );
+                                }
+                            }
                             plNowBoxCount.Text = "BOX " + BarTenderModel.NOW_BOX_COUNT.ToString() + "  OF  " + BarTenderModel.TOTAL_BOX_COUNT;
                         }
                     }
@@ -1131,7 +1178,8 @@ namespace BoxCode
                     tBoxScanBoxID.Enabled = false;
                     bool success = await TiveUploaderBLL.UploaderBoxIdToTiveSystem(
                         tBoxScanBoxID.Text,
-                        InputModel.ListInputValue
+                        InputModel.ListInputValue,
+                        _reworkTargetBoxNumber
                     );
 
                     if (success)
@@ -1143,6 +1191,7 @@ namespace BoxCode
                         InputModel.InputValueCount = 0;
                         InputModel.ListInputValue.Clear();
                         UIControlModel.SetTextBoxStatus(tb_model, true, true);
+                        _reworkTargetBoxNumber = null;
                     }
                     else
                     {
@@ -1324,6 +1373,14 @@ namespace BoxCode
             if (listBoxReprint.SelectedItem == null) return;
 
             string selectedBoxNumber = cbReprintBoxNumber.SelectedItem.ToString();
+            if (selectedBoxNumber.IndexOf('-') > 0)
+            {
+                _reworkTargetBoxNumber = selectedBoxNumber.Substring(0, selectedBoxNumber.IndexOf('-')).Trim();
+            }
+            else
+            {
+                _reworkTargetBoxNumber = selectedBoxNumber.Trim();
+            }
 
             string boxContent = BoxCode.BLL.BoxCodeBLL.GetBoxContent(selectedBoxNumber);
             if (!string.IsNullOrEmpty(boxContent))
@@ -1339,6 +1396,7 @@ namespace BoxCode
             else
             {
                 MessageBox.Show($"找不到第 {selectedBoxNumber} 箱的內容。");
+                _reworkTargetBoxNumber = null;
                 return;
             }
 
@@ -1352,13 +1410,43 @@ namespace BoxCode
             {
                 plResult.Text = "BOX " + selectedBoxNumber + " 重工列印完成";
                 plResult.FillColor = Color.Green;
-                UI_Update(tb_model.Text, ConstantModel.MESSAGE_CHANGE_NEXT_BOX);
-                PreViewModel.PreViewPageIndex = 1;
 
+                // --- 修正點 1：不要使用 MESSAGE_CHANGE_NEXT_BOX，避免觸發主畫面 listb 增加項目 ---
+                string logInfo = DateTime.Now.ToString() + "  重工箱號 : " + selectedBoxNumber + " 狀態 : 重工列印成功";
+                RTBoxRecord.SelectionColor = Color.Blue;
+                RTBoxRecord.AppendText(logInfo + Environment.NewLine);
+                RTBoxRecord.SelectionStart = RTBoxRecord.TextLength;
+                RTBoxRecord.ScrollToCaret();
+
+                PreViewModel.PreViewPageIndex = 1;
                 if (BarTenderModel.PACKING_NUMBER == "50")
                     Pint_PreViewForTIVE();
                 else
                     Pint_PreView();
+
+                // --- 修正點 2：重工列印結束後，徹底還原主畫面原本的正常生產進度與 listb 顯示 ---
+                BoxCodeBLL.CheckPackingStatus(); // 從 CSV 重新加載正確的生產進度
+
+                // 重新刷新主畫面的 ListBox 與 UI 文字顯示
+                listb_InputValue.Items.Clear();
+                int count = 1;
+                foreach (string field in InputModel.ListInputValue)
+                {
+                    listb_InputValue.Items.Add($"[{count.ToString("D6")}]   {field}");
+                    count++;
+                }
+                if (listb_InputValue.Items.Count > 0)
+                {
+                    listb_InputValue.SelectedIndex = listb_InputValue.Items.Count - 1;
+                }
+
+                // 刷新主畫面計數標籤
+                plNowBoxCount.Text = "BOX " + BarTenderModel.NOW_BOX_COUNT.ToString() + "  OF  " + BarTenderModel.TOTAL_BOX_COUNT;
+                plQuantityPerBox.Text = InputModel.InputValueCount.ToString() + "  OF  " + BarTenderModel.PACKING_NUMBER;
+
+                // 啟用輸入框讓作業員可以繼續刷下一筆
+                UIControlModel.SetTextBoxStatus(tb_model, true, true);
+                tb_model.Focus();
             }
             else
             {
@@ -1366,6 +1454,8 @@ namespace BoxCode
                 plResult.FillColor = Color.Red;
                 UI_Update(tb_model.Text, ConstantModel.ERROR_PRINT_FAIL);
                 UIControlModel.SetTextBoxStatus(tb_model, true, true);
+                _reworkTargetBoxNumber = null;
+                BoxCodeBLL.CheckPackingStatus();
             }
         }
     }

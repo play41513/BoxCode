@@ -15,7 +15,7 @@ public class NetworkImpersonator : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
     private extern static bool CloseHandle(IntPtr handle);
 
-    private const int LOGON32_LOGON_NETWORK = 3;
+    private const int LOGON32_LOGON_NETWORK = 9;
     private const int LOGON32_PROVIDER_DEFAULT = 0;
 
     /// <summary>

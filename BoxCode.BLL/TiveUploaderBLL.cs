@@ -44,7 +44,7 @@ namespace BoxCode.BLL
             Client.DefaultRequestHeaders.Add("nebula-api-key", apiUserKey);
             Client.Timeout = TimeSpan.FromSeconds(10);
         }
-        public static async Task<bool> UploaderBoxIdToTiveSystem(string BoxID, List<string> bleMacList)
+        public static async Task<bool> UploaderBoxIdToTiveSystem(string BoxID, List<string> bleMacList, string partNumber = null)
         {
             if (WorkOrderModel.TiveUpload == "false")
                 return true;
@@ -52,7 +52,8 @@ namespace BoxCode.BLL
             {
                 return await RegisterBoxAsync(
                     BoxID,
-                    bleMacList
+                    bleMacList,
+                    partNumber
                 );
             }
             catch
@@ -181,7 +182,8 @@ namespace BoxCode.BLL
         }
         public static async Task<bool> RegisterBoxAsync( 
            string BoxID,
-           List<string> bleMacList)
+           List<string> bleMacList,
+           string targetBoxNumber = null)
         {
             var url = baseUrl + "register/box";
 
@@ -242,7 +244,7 @@ namespace BoxCode.BLL
                     NLogDAL.Instance.LogWarning(new NLogModel("回應內容: " + result, "INFO"));
 
                     // 根據 HTTP 狀態碼判斷是否成功
-                    LoggingDAL.WriteBoxIdToLog(BoxID);
+                    LoggingDAL.WriteBoxIdToLog(BoxID,targetBoxNumber);
                     return response.IsSuccessStatusCode; // 直接回傳 API 是否成功
                 }
                 catch (Exception ex)

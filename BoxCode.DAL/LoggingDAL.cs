@@ -58,10 +58,13 @@ namespace BoxCode.DAL
                 // 直接嘗試建立目錄與寫入
                 Directory.CreateDirectory(nasBasePath);
                 File.WriteAllLines(Path.Combine(nasBasePath, logFileName), lines);
-                Debug.WriteLine("NAS 直接寫入成功");
+                // 若需詳細追蹤，可解除註解下行
+                // NLogDAL.Instance.LogInfo(new NLogModel("NAS 直接寫入成功", "INFO"));
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException uex)
             {
+                NLogDAL.Instance.LogWarning(new NLogModel($"NAS 權限不足，準備切換帳密登入模式。訊息: {uex.Message}", "WARNING"));
+
                 // 若直接寫入失敗，改用帳密
                 try
                 {
@@ -69,17 +72,34 @@ namespace BoxCode.DAL
                     {
                         Directory.CreateDirectory(nasBasePath);
                         File.WriteAllLines(Path.Combine(nasBasePath, logFileName), lines);
-                        Debug.WriteLine("NAS 帳號寫入成功");
+                        NLogDAL.Instance.LogInfo(new NLogModel("NAS 帳號(NetworkImpersonator)寫入成功", "INFO"));
                     }
+                }
+                catch (System.ComponentModel.Win32Exception win32Ex)
+                {
+                    // 捕捉 LogonUser 失敗的 Win32 API 錯誤碼 (例如 1326 帳密錯誤, 1219 多重連線衝突)
+                    NLogDAL.Instance.LogError(new NLogModel(
+                        $"NetworkImpersonator 登入 NAS 失敗。Win32ErrorCode: {win32Ex.NativeErrorCode}, 訊息: {win32Ex.Message}",
+                        "ERROR",
+                        win32Ex));
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"NAS 寫入仍失敗: {ex.Message}");
+                    // 其他未知的寫入失敗 (例如檔案被佔用)
+                    NLogDAL.Instance.LogError(new NLogModel(
+                        $"NetworkImpersonator 登入後寫入仍失敗。HResult: 0x{ex.HResult:X8}, 訊息: {ex.Message}",
+                        "ERROR",
+                        ex));
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"NAS 寫入發生網路或 I/O 錯誤: {ex.Message}");
+                // 捕捉非權限問題的 I/O 錯誤 (如路徑找不到、檔案被 Excel 鎖定)
+                // 檔案被佔用的典型 HResult 為 0x80070020
+                NLogDAL.Instance.LogError(new NLogModel(
+                    $"NAS 直接寫入發生網路或 I/O 錯誤。HResult: 0x{ex.HResult:X8}, 訊息: {ex.Message}",
+                    "ERROR",
+                    ex));
             }
 
             // 寫入本地備份
@@ -90,7 +110,7 @@ namespace BoxCode.DAL
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"本地備份寫入失敗: {ex.Message}");
+                NLogDAL.Instance.LogError(new NLogModel($"本地備份寫入失敗。訊息: {ex.Message}", "ERROR", ex));
             }
         }
 
@@ -231,25 +251,58 @@ namespace BoxCode.DAL
             }
         }
 
-        public static void WriteBoxIdToLog(string BoxId)
+        public static void WriteBoxIdToLog(string BoxId, string targetBoxNumber = null)
         {
             var lines = InternalReadAllLines();
             if (lines.Count == 0) return;
 
             int BoxNumberLineIndex = -1;
-            for (int i = lines.Count - 1; i >= 0; i--)
+
+            if (string.IsNullOrEmpty(targetBoxNumber))
             {
-                if (lines[i].Contains("Box"))
+                // 正常產線模式 從最後一行往前找第一個包含 "Box" 的行
+                for (int i = lines.Count - 1; i >= 0; i--)
                 {
-                    BoxNumberLineIndex = i;
-                    break;
+                    if (lines[i].Contains("Box"))
+                    {
+                        BoxNumberLineIndex = i;
+                        break;
+                    }
+                }
+
+                if (BoxNumberLineIndex >= 0)
+                {
+                    // 直接在末尾串接 BoxId
+                    lines[BoxNumberLineIndex] = string.Concat(lines[BoxNumberLineIndex], "-" + BoxId);
+                    InternalWriteAllLines(lines);
                 }
             }
-
-            if (BoxNumberLineIndex >= 0)
+            else
             {
-                lines[BoxNumberLineIndex] = string.Concat(lines[BoxNumberLineIndex], "-" + BoxId);
-                InternalWriteAllLines(lines);
+                string pattern = $@"^{Regex.Escape(targetBoxNumber.Trim())}(-$|$)";
+
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    // 去除可能存在的 BoxID 後進行比對，或者直接用正則判斷開頭
+                    if (Regex.IsMatch(lines[i].Split('-')[0].Trim(), $@"^{Regex.Escape(targetBoxNumber.Trim())}$", RegexOptions.IgnoreCase))
+                    {
+                        BoxNumberLineIndex = i;
+                        break;
+                    }
+                }
+
+                if (BoxNumberLineIndex >= 0)
+                {
+                    string pureBoxHeader = lines[BoxNumberLineIndex].Split('-')[0].Trim();
+                    lines[BoxNumberLineIndex] = $"{pureBoxHeader}-{BoxId}";
+
+                    InternalWriteAllLines(lines);
+                    Debug.WriteLine($"重工模式：已成功取代 {targetBoxNumber} 的 BoxID 為 {BoxId}");
+                }
+                else
+                {
+                    Debug.WriteLine($"重工錯誤：在 Log 中找不到指定的箱號 {targetBoxNumber}");
+                }
             }
         }
 
