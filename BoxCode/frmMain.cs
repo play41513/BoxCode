@@ -60,6 +60,31 @@ namespace BoxCode
             BoxCodeBLL.PrintEngineEnable(false, null);
             System.Environment.Exit(0);
         }
+        private void RestoreHomeStatus()
+        {
+            // 1. 從 CSV 重新加載正確的生產進度
+            BoxCodeBLL.CheckPackingStatus();
+
+            // 2. 重新刷新主畫面的 ListBox 與 UI 文字顯示
+            listb_InputValue.Items.Clear();
+            int count = 1;
+            foreach (string field in InputModel.ListInputValue)
+            {
+                listb_InputValue.Items.Add($"[{count.ToString("D6")}]   {field}");
+                count++;
+            }
+            if (listb_InputValue.Items.Count > 0)
+            {
+                listb_InputValue.SelectedIndex = listb_InputValue.Items.Count - 1;
+            }
+            // 刷新主畫面計數標籤
+            plNowBoxCount.Text = "BOX " + BarTenderModel.NOW_BOX_COUNT.ToString() + "  OF  " + BarTenderModel.TOTAL_BOX_COUNT;
+            plQuantityPerBox.Text = InputModel.InputValueCount.ToString() + "  OF  " + BarTenderModel.PACKING_NUMBER;
+
+            // 啟用輸入框讓作業員可以繼續刷下一筆
+            UIControlModel.SetTextBoxStatus(tb_model, true, true);
+            tb_model.Focus();
+        }
         /// <summary>
         /// 判斷主頁面輸入欄位的值
         /// Validate the Input Fields on the Main Page.
@@ -626,9 +651,8 @@ namespace BoxCode
                             {
                                 tabControlPanel.SelectTab(ConstantModel.PAGE_CONTROL_HOME_PANEL);
                                 //換箱清空數據
-                                InputModel.InputValueCount = 0;
-                                InputModel.ListInputValue.Clear();
                                 UIControlModel.SetTextBoxStatus(tb_model, true, true);
+                                RestoreHomeStatus();
                             }
                         }
                         else
@@ -754,10 +778,8 @@ namespace BoxCode
                             else
                             {
                                 tabControlPanel.SelectTab(ConstantModel.PAGE_CONTROL_HOME_PANEL);
-                                //換箱清空數據
-                                InputModel.InputValueCount = 0;
-                                InputModel.ListInputValue.Clear();
                                 UIControlModel.SetTextBoxStatus(tb_model, true, true);
+                                RestoreHomeStatus();
                             }
                         }
                         else
@@ -1036,6 +1058,7 @@ namespace BoxCode
             tabControlPanel.SelectTab(ConstantModel.PAGE_CONTROL_HOME_PANEL);
             UIControlModel.SetTextBoxStatus(tb_model, true, true);
             UI_Update("[BackHomePage]", ConstantModel.MESSAGE_ENTER_PAGE_HOMEPAGE);
+            RestoreHomeStatus();
         }
         private static void GlobalExceptionHandler(object sender, ThreadExceptionEventArgs e)
         {
@@ -1192,6 +1215,7 @@ namespace BoxCode
                         InputModel.ListInputValue.Clear();
                         UIControlModel.SetTextBoxStatus(tb_model, true, true);
                         _reworkTargetBoxNumber = null;
+                        RestoreHomeStatus();
                     }
                     else
                     {
@@ -1423,30 +1447,6 @@ namespace BoxCode
                     Pint_PreViewForTIVE();
                 else
                     Pint_PreView();
-
-                // --- 修正點 2：重工列印結束後，徹底還原主畫面原本的正常生產進度與 listb 顯示 ---
-                BoxCodeBLL.CheckPackingStatus(); // 從 CSV 重新加載正確的生產進度
-
-                // 重新刷新主畫面的 ListBox 與 UI 文字顯示
-                listb_InputValue.Items.Clear();
-                int count = 1;
-                foreach (string field in InputModel.ListInputValue)
-                {
-                    listb_InputValue.Items.Add($"[{count.ToString("D6")}]   {field}");
-                    count++;
-                }
-                if (listb_InputValue.Items.Count > 0)
-                {
-                    listb_InputValue.SelectedIndex = listb_InputValue.Items.Count - 1;
-                }
-
-                // 刷新主畫面計數標籤
-                plNowBoxCount.Text = "BOX " + BarTenderModel.NOW_BOX_COUNT.ToString() + "  OF  " + BarTenderModel.TOTAL_BOX_COUNT;
-                plQuantityPerBox.Text = InputModel.InputValueCount.ToString() + "  OF  " + BarTenderModel.PACKING_NUMBER;
-
-                // 啟用輸入框讓作業員可以繼續刷下一筆
-                UIControlModel.SetTextBoxStatus(tb_model, true, true);
-                tb_model.Focus();
             }
             else
             {
